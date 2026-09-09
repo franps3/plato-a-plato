@@ -1,0 +1,1 @@
+# Paquete "vistas": interfaces de usuario (CustomTkinter) del sistema "Plato a Plato".

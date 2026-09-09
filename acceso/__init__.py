@@ -1,0 +1,1 @@
+# Paquete "acceso": capa de DAOs (acceso a datos local SQLite) del sistema "Plato a Plato".

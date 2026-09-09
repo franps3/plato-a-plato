@@ -1,0 +1,6 @@
+[2026-09-09] Agente 3 (Controlador y Servicios)
+- Configurado el entorno: venv con Python 3.14.2, requirements.txt, .gitignore y estructura /control, /acceso, /vistas, /tests.
+- Implementados CU1 (crearSesion), CU2 (iniciarSesion) y CU3 (cerrarSesion) en control/controlador.py con hashing SHA-256 de la contraseña, validación de fondo inicial >= 0 y sesión única.
+- Creado control/excepciones.py (jerarquía AppError/DomainError/PersistenceError) y control/modelos.py (DTO Sesion).
+- Definido el contrato de acceso/mainDAO.py para el Agente 1 y un FakeMainDAO para pruebas.
+- Añadidos tests (tests/test_sesion.py) que validan los tres casos de uso y el logging a plato.log (11/11 pasan).

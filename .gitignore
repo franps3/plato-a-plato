@@ -1,0 +1,21 @@
+# Entorno virtual
+venv/
+
+# Artefactos de ejecución de la app
+bd.db
+plato.log
+
+# Cachés de Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+
+# Artefactos de PyInstaller
+build/
+dist/
+*.spec
+
+# Archivos temporales de verificación
+_ver*.txt
+_venv*.txt
+_pip.txt
