@@ -20,10 +20,13 @@ from .excepciones import (
     CredencialInvalida,
     FondoInvalido,
     PasswordInvalido,
+    ProductoEnCarrito,
     SesionNoEncontrada,
     SesionYaExiste,
 )
 from .modelos import Sesion
+from .servProd import ServProd
+from .servStock import ServStock
 
 # Configuración de logging central de la aplicación.
 # Se usa un FileHandler explícito para que plato.log se cree bajo cualquier
@@ -50,15 +53,30 @@ class Controlador:
     para pruebas). Por defecto instancia el DAO real de acceso.mainDAO.
     """
 
-    def __init__(self, dao=None):
+    def __init__(self, dao=None, prodDAO=None, stockDAO=None):
         # Import perezoso: evita dependencias circulares y permite inyectar
-        # un FakeMainDAO en pruebas sin tocar la lógica de negocio.
+        # DAOs falsos en pruebas sin tocar la lógica de negocio. Cuando el
+        # Agente 1 entregue los DAOs reales, estos defaults quedan operativos.
         if dao is None:
             from acceso.mainDAO import mainDAO
 
-            self.dao = mainDAO
-        else:
-            self.dao = dao
+            dao = mainDAO
+        if prodDAO is None:
+            from acceso.prodDAO import prodDAO as prodDAOReal
+
+            prodDAO = prodDAOReal()
+        if stockDAO is None:
+            from acceso.stockDAO import stockDAO as stockDAOReal
+
+            stockDAO = stockDAOReal()
+
+        self.dao = dao
+        self.prodDAO = prodDAO
+        self.stockDAO = stockDAO
+
+        # Servicios de negocio (capa de servicios del Agente 3).
+        self.servProd = ServProd(prodDAO)
+        self.servStock = ServStock(stockDAO)
 
         # Estado en memoria del controlador.
         self.sesionActiva: Optional[Sesion] = None
@@ -199,3 +217,118 @@ class Controlador:
     def estaAutenticado(self) -> bool:
         """Indica si hay una sesión activa en memoria (UI desbloqueada)."""
         return self.sesionActiva is not None
+    # ------------------------------------------------------------------
+    # CU4: crearProducto(nombre, stockInicial, precio)
+    # Ingresa nombre, precio y stock inicial: agrega el ítem al catálogo
+    # de la sesión. Solo accesible con sesión activa (lo garantiza la vista).
+    # ------------------------------------------------------------------
+    def crearProducto(self, nombre, stockInicial, precio) -> dict:
+        """Agrega un producto al catálogo de la sesión.
+
+        Retorno: {"ok": bool, "mensaje": str, "datos": Producto|None}
+        """
+        try:
+            producto = self.servProd.crearProducto(
+                nombre, stockInicial, precio, self.sesionActiva.idSesion
+            )
+            return {
+                "ok": True,
+                "mensaje": "Producto agregado al catálogo.",
+                "datos": producto,
+            }
+        except AppError as err:
+            log.error("%s: %s", type(err).__name__, err, exc_info=True)
+            return {"ok": False, "mensaje": str(err), "datos": None}
+
+    # ------------------------------------------------------------------
+    # CU5: verProductos()
+    # Despliega el listado completo de existencias. El controlador arma el
+    # listado combinando prodDAO (productos sin stock) + stockDAO por ítem
+    # (decisión de diseño acordada).
+    # ------------------------------------------------------------------
+    def verProductos(self) -> dict:
+        """Lista los productos de la sesión con su stock actual.
+
+        Retorno: {"ok": bool, "mensaje": str, "datos": [Producto, ...]}
+        """
+        try:
+            productos = self.servProd.verProductos(self.sesionActiva.idSesion)
+            for producto in productos:
+                producto.stock = self.servStock.verStock(producto.idProducto)
+            return {
+                "ok": True,
+                "mensaje": "Catálogo actualizado.",
+                "datos": productos,
+            }
+        except AppError as err:
+            log.error("%s: %s", type(err).__name__, err, exc_info=True)
+            return {"ok": False, "mensaje": str(err), "datos": None}
+
+    # ------------------------------------------------------------------
+    # CU6: seleccionarProducto(idProducto)
+    # Tarea exclusivamente visual (Agente 2): el clic en un ítem de la
+    # lista habilita el menú editar/borrar. No requiere lógica acá.
+    # ------------------------------------------------------------------
+
+    # ------------------------------------------------------------------
+    # CU7: editarProducto(idProducto, nombre, precio)
+    #      editarStock(idProducto, stock)
+    # Modifica nombre/precio (vía prodDAO) o stock (vía stockDAO). La vista
+    # refresca el catálogo llamando a verProductos().
+    # ------------------------------------------------------------------
+    def editarProducto(self, idProducto, nombre, precio) -> dict:
+        """Modifica nombre y precio de un producto del catálogo.
+
+        Retorno: {"ok": bool, "mensaje": str, "datos": Producto|None}
+        """
+        try:
+            producto = self.servProd.editarProducto(idProducto, nombre, precio)
+            return {
+                "ok": True,
+                "mensaje": "Producto modificado correctamente.",
+                "datos": producto,
+            }
+        except AppError as err:
+            log.error("%s: %s", type(err).__name__, err, exc_info=True)
+            return {"ok": False, "mensaje": str(err), "datos": None}
+
+    def editarStock(self, idProducto, stock) -> dict:
+        """Modifica el stock de un producto del catálogo.
+
+        Retorno: {"ok": bool, "mensaje": str, "datos": int|None}
+        """
+        try:
+            stockNuevo = self.servStock.editarStock(idProducto, stock)
+            return {
+                "ok": True,
+                "mensaje": "Stock actualizado correctamente.",
+                "datos": stockNuevo,
+            }
+        except AppError as err:
+            log.error("%s: %s", type(err).__name__, err, exc_info=True)
+            return {"ok": False, "mensaje": str(err), "datos": None}
+
+    # ------------------------------------------------------------------
+    # CU8: eliminarProducto(idProducto)
+    # Da de baja el producto de la lista activa. Está prohibido eliminar
+    # un producto que esté en el carrito actual (regla acordada).
+    # ------------------------------------------------------------------
+    def eliminarProducto(self, idProducto) -> dict:
+        """Elimina un producto del catálogo de la sesión.
+
+        Retorno: {"ok": bool, "mensaje": str, "datos": None}
+        """
+        try:
+            if idProducto in self.carrito:
+                raise ProductoEnCarrito(
+                    "No se puede eliminar un producto que está en el carrito."
+                )
+            self.servProd.eliminarProducto(idProducto)
+            return {
+                "ok": True,
+                "mensaje": "Producto eliminado correctamente.",
+                "datos": None,
+            }
+        except AppError as err:
+            log.error("%s: %s", type(err).__name__, err, exc_info=True)
+            return {"ok": False, "mensaje": str(err), "datos": None}

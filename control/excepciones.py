@@ -46,3 +46,32 @@ class SesionNoEncontrada(DomainError):
 class CredencialInvalida(DomainError):
     """Las credenciales ingresadas no coinciden con la sesión guardada."""
     pass
+
+
+# ---------------------------------------------------------------------------
+# Errores específicos del dominio de productos (CU4, CU5, CU7, CU8)
+# ---------------------------------------------------------------------------
+
+class NombreInvalido(DomainError):
+    """El nombre del producto no cumple las reglas (ej. vacío)."""
+    pass
+
+
+class PrecioInvalido(DomainError):
+    """El precio del producto es inválido (ej. negativo o no numérico)."""
+    pass
+
+
+class StockInvalido(DomainError):
+    """El stock del producto es inválido (ej. negativo o no entero)."""
+    pass
+
+
+class ProductoNoEncontrado(DomainError):
+    """No existe el producto solicitado en la sesión."""
+    pass
+
+
+class ProductoEnCarrito(DomainError):
+    """Operación rechazada porque el producto está en el carrito actual."""
+    pass

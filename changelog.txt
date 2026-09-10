@@ -1,3 +1,12 @@
+[2026-09-10] Agente 3 (Controlador y Servicios)
+- Implementados CU4 (crearProducto), CU5 (verProductos), CU7 (editarProducto/editarStock) y CU8 (eliminarProducto).
+- CU6 quedó definido como tarea exclusivamente visual (Agente 2): seleccionar un ítem habilita el menú editar/borrar; no requiere lógica de controlador.
+- Creados control/servProd.py y control/servStock.py con validaciones de dominio: nombre no vacío, precio >= 0 numérico y stock entero >= 0.
+- Regla de negocio acordada: queda prohibido eliminar un producto que esté en el carrito (DomainError ProductoEnCarrito).
+- Agregadas excepciones (NombreInvalido, PrecioInvalido, StockInvalido, ProductoNoEncontrado, ProductoEnCarrito) y el modelo Producto.
+- Definidos los contratos acceso/prodDAO.py y acceso/stockDAO.py para el Agente 1. verProductos devuelve sin stock; el controlador arma el listado llamando a servStock.verStock por ítem.
+- Tests de productos (tests/test_productos.py): 16 casos nuevos. Suite completa: 27/27 en verde.
+- Incluida la convención de commits y changelog agregada a docs/spec.md.
 [2026-09-09] Agente 3 (Controlador y Servicios)
 - Configurado el entorno: venv con Python 3.14.2, requirements.txt, .gitignore y estructura /control, /acceso, /vistas, /tests.
 - Implementados CU1 (crearSesion), CU2 (iniciarSesion) y CU3 (cerrarSesion) en control/controlador.py con hashing SHA-256 de la contraseña, validación de fondo inicial >= 0 y sesión única.

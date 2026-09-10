@@ -19,3 +19,21 @@ class Sesion:
     fechaInicio: str
     fondoInicial: float
     caja: float
+
+
+@dataclass
+class Producto:
+    """Producto del catálogo de la sesión activa.
+
+    Atributos:
+        idProducto: Identificador único del producto en la base de datos.
+        nombre: Nombre del producto (no vacío).
+        precio: Precio unitario (float) mayor o igual a cero.
+        stock: Existencias actuales (int) mayor o igual a cero. En
+            verProductos() el controlador lo completa consultando a
+            servStock.verStock por producto.
+    """
+    idProducto: int
+    nombre: str
+    precio: float
+    stock: int = 0
