@@ -47,3 +47,16 @@ class ServStock:
                 "No se encontró el producto a editar."
             )
         return int(resultado)
+
+    def descontar(self, idProducto, cantidad) -> int:
+        """Resta una cantidad del stock (CU10) y devuelve el stock restante.
+
+        Decisión acordada: este servicio NO valida stock suficiente; esa
+        validación la realiza servVenta antes de registrar la venta.
+        """
+        resultado = self.stockDAO.descontar(idProducto, cantidad)
+        if resultado is None:
+            raise ProductoNoEncontrado(
+                "No se encontró el producto a descontar."
+            )
+        return int(resultado)

@@ -1,3 +1,12 @@
+[2026-09-12] Agente 3 (Controlador y Servicios)
+- Implementados CU9 (agregarProd/quitarProd con botones +/-), CU10 (confirmarVenta), CU11 (gasto y reinsertar) y CU12 (verHistorial).
+- Reglas acordadas: agregarProd no supera el stock disponible; quitarProd elimina el ítem al llegar a 0; confirmarVenta vacía el carrito y falla con carrito vacío; servVenta valida stock suficiente antes de persistir.
+- La caja (Sesion.Caja) se persiste en ventaDAO dentro de la misma transacción que la venta o el gasto/reinserción.
+- CU11: monto firmado en negativo para gasto y positivo para reinserción; el tipo sale del signo. Un gasto no puede dejar la caja en negativo.
+- CU12: lista única de movimientos ordenada cronológica descendente; ventas con detalles [{nombre, cantidad, monto}]. Timestamps con microsegundos para garantizar el orden.
+- Creados control/servVenta.py, excepciones (CarritoVacio, StockInsuficiente, SaldoInsuficiente, MontoInvalido, VentaNoEncontrada) y modelos (DetalleVenta, Venta, GastoSecundario).
+- Definido el contrato acceso/ventaDAO.py para el Agente 1 y agregado descontar al contrato stockDAO.
+- Tests de ventas (tests/test_venta.py): 14 casos nuevos. Suite completa: 41/41 en verde.
 [2026-09-10] Agente 3 (Controlador y Servicios)
 - Implementados CU4 (crearProducto), CU5 (verProductos), CU7 (editarProducto/editarStock) y CU8 (eliminarProducto).
 - CU6 quedó definido como tarea exclusivamente visual (Agente 2): seleccionar un ítem habilita el menú editar/borrar; no requiere lógica de controlador.

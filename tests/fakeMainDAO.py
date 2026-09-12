@@ -95,3 +95,75 @@ class FakeStockDAO:
             return None
         p[4] = stock
         return stock
+
+    def descontar(self, idProducto, cantidad):
+        """Resta cantidad al stock (sin validar); devuelve el resto o None."""
+        p = self._bd.productos.get(idProducto)
+        if p is None:
+            return None
+        p[4] -= cantidad
+        return p[4]
+
+
+class FakeVentaDAO:
+    """Falso DAO de ventas, detalles, gastos y caja.
+
+    Replica el contrato acordado: la caja de la sesión se persiste dentro
+    de la misma operación que registra la venta o el gasto/reinserción.
+    """
+
+    def __init__(self, bd=None):
+        self._bd = bd if bd is not None else FakeBD()
+        self._ventas = {}   # id -> [id, idSesion, fechaHora, montoNeto, detalles]
+        self._gastos = {}   # id -> [id, idSesion, nombre, monto, descripcion, fechaHora]
+        self._proximoIdVenta = 1
+        self._proximoIdGasto = 1
+
+    def _actualizarCaja(self, cajaNueva):
+        """Actualiza la columna Caja de la sesión simulada."""
+        if self._bd.sesion is None:
+            return
+        idSesion, fechaInicio, fondoInicial, caja, passHash = self._bd.sesion
+        self._bd.sesion = (idSesion, fechaInicio, fondoInicial, cajaNueva, passHash)
+
+    def registrarVenta(self, idSesion, fechaHora, detalles, montoNeto,
+                       cajaNueva) -> int:
+        """Persiste venta + detalles + caja; devuelve ID_venta."""
+        idVenta = self._proximoIdVenta
+        self._proximoIdVenta += 1
+        self._ventas[idVenta] = [
+            idVenta, idSesion, fechaHora, montoNeto, list(detalles)
+        ]
+        self._actualizarCaja(cajaNueva)
+        return idVenta
+
+    def registrarGasto(self, idSesion, nombre, monto, descripcion,
+                       fechaHora, cajaNueva) -> int:
+        """Persiste gasto/reinserción + caja; devuelve ID_gasto."""
+        idGasto = self._proximoIdGasto
+        self._proximoIdGasto += 1
+        self._gastos[idGasto] = [
+            idGasto, idSesion, nombre, monto, descripcion, fechaHora
+        ]
+        self._actualizarCaja(cajaNueva)
+        return idGasto
+
+    def verVentas(self, idSesion):
+        """Devuelve las ventas de la sesión:
+        (ID_venta, Fecha_hora, list[(ID_producto, Cantidad, Precio_unitario)])
+        """
+        return [
+            (v[0], v[2], v[4])
+            for v in self._ventas.values()
+            if v[1] == idSesion
+        ]
+
+    def verGastos(self, idSesion):
+        """Devuelve los gastos/reinserciones de la sesión:
+        (ID_gasto, Nombre, Monto, Descripcion, Fecha_hora)
+        """
+        return [
+            (g[0], g[2], g[3], g[4], g[5])
+            for g in self._gastos.values()
+            if g[1] == idSesion
+        ]

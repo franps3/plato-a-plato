@@ -37,3 +37,54 @@ class Producto:
     nombre: str
     precio: float
     stock: int = 0
+
+
+@dataclass
+class DetalleVenta:
+    """Línea de detalle de una venta (tabla DetalleVenta).
+
+    Atributos:
+        idProducto: Producto vendido (FK).
+        cantidad: Cantidad vendida (int > 0).
+        precioUnitario: Precio unitario al momento de la venta.
+        monto: Total de la línea = cantidad * precioUnitario.
+    """
+    idProducto: int
+    cantidad: int
+    precioUnitario: float
+    monto: float
+
+
+@dataclass
+class Venta:
+    """Venta registrada de la sesión.
+
+    Atributos:
+        idVenta: Identificador único de la venta en la base de datos.
+        fechaHora: Marca de tiempo (str) de registro de la venta.
+        detalles: Lista de DetalleVenta de la venta.
+        montoNeto: Total de la venta (suma de los importes de las líneas).
+    """
+    idVenta: int
+    fechaHora: str
+    detalles: list
+    montoNeto: float
+
+
+@dataclass
+class GastoSecundario:
+    """Gasto o reinserción de dinero de la caja (tabla GastoSecundario).
+
+    Atributos:
+        idGasto: Identificador único del gasto en la base de datos.
+        nombre: Nombre o concepto del gasto/reinserción.
+        monto: Monto FIRMADO: negativo para gasto, positivo para
+            reinserción (decisión acordada; el tipo sale del signo).
+        descripcion: Descripción aportada por el usuario.
+        fechaHora: Marca de tiempo (str) del registro.
+    """
+    idGasto: int
+    nombre: str
+    monto: float
+    descripcion: str
+    fechaHora: str

@@ -56,10 +56,10 @@
 * CU5: verProductos() -> servProd.verProductos(), servStock.verStock(idProd) -> prodDAO, stockDAO  
 * CU6: seleccionarProducto(idProd)  
 * CU7: editarProducto(idProd, newNombre, newPrecio) o editarStock(idProd, newStock) ->servProd.editarProducto(idProd, nombre, precio, stock), servStock.editarStock(idProd, newStock) -> prodDAO, stockDAO  
-* CU8: eliminarProducto(idProd) -> servProd.eliminarProducto(idProd) -> prodDAO  
+* CU8: eliminarProducto(idProd) -> servProd.eliminarProducto(idProd) -> prodDAO
 * CU9: agregarProd(idProd)  
 * CU10: confirmarVenta(carrito) -> servVenta.registrarVenta(carrito), servStock.descontar(idProd, stock) -> ventaDAO, stockDAO  
-* CU11: gasto(nombre, desc, monto) -> servVenta.registrarGasto() -> ventaDAO  
+* CU11: gasto(nombre, desc, monto) -> servVenta.registrarGasto() -> ventaDAO
 * CU12: verHistorial() -> servVenta.verVentas(), servVenta.verGastos(), servProd.verProductos() -> ventaDAO, prodDAO  
 * CU13: exportExcel() -> mainDAO.exportar()  
 * CU14: borrarHistorial() -> servVenta.borrarHistorial() -> ventaDAO  

@@ -75,3 +75,32 @@ class ProductoNoEncontrado(DomainError):
 class ProductoEnCarrito(DomainError):
     """Operación rechazada porque el producto está en el carrito actual."""
     pass
+
+
+# ---------------------------------------------------------------------------
+# Errores específicos del dominio de ventas, caja y gastos (CU9-CU12)
+# ---------------------------------------------------------------------------
+
+class CarritoVacio(DomainError):
+    """Operación rechazada porque el carrito de venta está vacío."""
+    pass
+
+
+class StockInsuficiente(DomainError):
+    """No hay stock suficiente del producto para la operación."""
+    pass
+
+
+class SaldoInsuficiente(DomainError):
+    """No hay saldo suficiente en caja para registrar el egreso."""
+    pass
+
+
+class MontoInvalido(DomainError):
+    """El monto ingresado es inválido (ej. negativo o no numérico)."""
+    pass
+
+
+class VentaNoEncontrada(DomainError):
+    """No existe la venta solicitada en la sesión."""
+    pass

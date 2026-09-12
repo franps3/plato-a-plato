@@ -17,16 +17,22 @@ from typing import Optional
 
 from .excepciones import (
     AppError,
+    CarritoVacio,
     CredencialInvalida,
     FondoInvalido,
+    MontoInvalido,
     PasswordInvalido,
     ProductoEnCarrito,
+    ProductoNoEncontrado,
+    SaldoInsuficiente,
     SesionNoEncontrada,
     SesionYaExiste,
+    StockInsuficiente,
 )
-from .modelos import Sesion
+from .modelos import DetalleVenta, Sesion
 from .servProd import ServProd
 from .servStock import ServStock
+from .servVenta import ServVenta
 
 # Configuración de logging central de la aplicación.
 # Se usa un FileHandler explícito para que plato.log se cree bajo cualquier
@@ -53,7 +59,7 @@ class Controlador:
     para pruebas). Por defecto instancia el DAO real de acceso.mainDAO.
     """
 
-    def __init__(self, dao=None, prodDAO=None, stockDAO=None):
+    def __init__(self, dao=None, prodDAO=None, stockDAO=None, ventaDAO=None):
         # Import perezoso: evita dependencias circulares y permite inyectar
         # DAOs falsos en pruebas sin tocar la lógica de negocio. Cuando el
         # Agente 1 entregue los DAOs reales, estos defaults quedan operativos.
@@ -69,14 +75,20 @@ class Controlador:
             from acceso.stockDAO import stockDAO as stockDAOReal
 
             stockDAO = stockDAOReal()
+        if ventaDAO is None:
+            from acceso.ventaDAO import ventaDAO as ventaDAOReal
+
+            ventaDAO = ventaDAOReal()
 
         self.dao = dao
         self.prodDAO = prodDAO
         self.stockDAO = stockDAO
+        self.ventaDAO = ventaDAO
 
         # Servicios de negocio (capa de servicios del Agente 3).
         self.servProd = ServProd(prodDAO)
         self.servStock = ServStock(stockDAO)
+        self.servVenta = ServVenta(ventaDAO, stockDAO)
 
         # Estado en memoria del controlador.
         self.sesionActiva: Optional[Sesion] = None
@@ -328,6 +340,246 @@ class Controlador:
                 "ok": True,
                 "mensaje": "Producto eliminado correctamente.",
                 "datos": None,
+            }
+        except AppError as err:
+            log.error("%s: %s", type(err).__name__, err, exc_info=True)
+            return {"ok": False, "mensaje": str(err), "datos": None}
+# ------------------------------------------------------------------
+    # Utilidad de validación de montos (CU11)
+    # ------------------------------------------------------------------
+    @staticmethod
+    def _validarMonto(monto) -> float:
+        """Valida que el monto sea numérico y mayor a cero (CU11)."""
+        if isinstance(monto, bool) or not isinstance(monto, (int, float)):
+            raise MontoInvalido("El monto debe ser un número mayor a cero.")
+        if monto <= 0:
+            raise MontoInvalido("El monto debe ser un número mayor a cero.")
+        return float(monto)
+
+    # ------------------------------------------------------------------
+    # CU9: agregarProd(idProducto) / quitarProd(idProducto)
+    # Los botones (+/-) junto al producto modifican la cantidad del ítem
+    # en el carrito actual. Reglas acordadas:
+    #   * agregarProd valida no superar el stock disponible.
+    #   * quitarProd resta 1 y al llegar a 0 elimina el ítem del carrito
+    #     (la vista garantiza que solo se invoca con el ítem agregado).
+    # ------------------------------------------------------------------
+    def agregarProd(self, idProducto) -> dict:
+        """Suma una unidad del producto al carrito si hay stock (CU9).
+
+        Retorno: {"ok": bool, "mensaje": str, "datos": int|None}
+        """
+        try:
+            stock = self.servStock.verStock(idProducto)
+            cantidadActual = self.carrito.get(idProducto, 0)
+            if cantidadActual + 1 > stock:
+                raise StockInsuficiente(
+                    "No hay stock suficiente para agregar más unidades."
+                )
+            self.carrito[idProducto] = cantidadActual + 1
+            return {
+                "ok": True,
+                "mensaje": "Producto agregado a la venta.",
+                "datos": self.carrito[idProducto],
+            }
+        except AppError as err:
+            log.error("%s: %s", type(err).__name__, err, exc_info=True)
+            return {"ok": False, "mensaje": str(err), "datos": None}
+
+    def quitarProd(self, idProducto) -> dict:
+        """Resta una unidad; al llegar a 0 elimina el ítem del carrito (CU9).
+
+        Retorno: {"ok": bool, "mensaje": str, "datos": int|None}
+        """
+        try:
+            if idProducto in self.carrito:
+                nuevaCantidad = self.carrito[idProducto] - 1
+                if nuevaCantidad <= 0:
+                    del self.carrito[idProducto]
+                else:
+                    self.carrito[idProducto] = nuevaCantidad
+            # La vista garantiza que solo se invoca si el ítem está agregado.
+            return {
+                "ok": True,
+                "mensaje": "Cantidad actualizada.",
+                "datos": self.carrito.get(idProducto, 0),
+            }
+        except AppError as err:
+            log.error("%s: %s", type(err).__name__, err, exc_info=True)
+            return {"ok": False, "mensaje": str(err), "datos": None}
+# ------------------------------------------------------------------
+    # CU10: confirmarVenta()
+    # Confirma la transacción: registra venta + detalles, descuenta stock,
+    # suma el total a caja y vacía el carrito. La caja nueva se persiste
+    # en ventaDAO dentro de la misma transacción que la venta.
+    # ------------------------------------------------------------------
+    def confirmarVenta(self) -> dict:
+        """Registra la venta multiproducto del carrito actual (CU10).
+
+        El controlador arma los detalles con el precio actual (servProd),
+        servVenta valida stock suficiente ANTES de persistir y luego
+        servStock.descontar resta el stock de cada ítem.
+
+        Retorno: {"ok": bool, "mensaje": str, "datos": Venta|None}
+        """
+        try:
+            if not self.carrito:
+                raise CarritoVacio("El carrito está vacío.")
+
+            idSesion = self.sesionActiva.idSesion
+
+            # Arma los detalles con el precio actual del producto.
+            productos = {
+                p.idProducto: p
+                for p in self.servProd.verProductos(idSesion)
+            }
+            detalles = []
+            for idProducto, cantidad in self.carrito.items():
+                producto = productos.get(idProducto)
+                if producto is None:
+                    raise ProductoNoEncontrado(
+                        "No se encontró el producto solicitado."
+                    )
+                monto = round(cantidad * producto.precio, 2)
+                detalles.append(
+                    DetalleVenta(
+                        idProducto=idProducto,
+                        cantidad=cantidad,
+                        precioUnitario=producto.precio,
+                        monto=monto,
+                    )
+                )
+
+            montoNeto = round(sum(d.monto for d in detalles), 2)
+            cajaNueva = round(self.sesionActiva.caja + montoNeto, 2)
+
+            # Registra venta + detalles + caja en la misma transacción.
+            venta = self.servVenta.registrarVenta(
+                idSesion, detalles, cajaNueva
+            )
+
+            # Descuenta el stock de cada ítem (validación ya hecha).
+            for detalle in detalles:
+                self.servStock.descontar(detalle.idProducto, detalle.cantidad)
+
+            # Actualiza el estado en memoria y vacía el carrito.
+            self.sesionActiva.caja = cajaNueva
+            self.carrito = {}
+            return {
+                "ok": True,
+                "mensaje": "Venta registrada correctamente.",
+                "datos": venta,
+            }
+        except AppError as err:
+            log.error("%s: %s", type(err).__name__, err, exc_info=True)
+            return {"ok": False, "mensaje": str(err), "datos": None}
+# ------------------------------------------------------------------
+    # CU11: gasto(nombre, desc, monto) / reinsertar(nombre, desc, monto)
+    # El gasto registra un egreso (descuenta caja); la reinserción suma
+    # dinero a caja. Se persiste el monto FIRMADO (negativo = gasto,
+    # positivo = reinserción); el tipo sale del signo en el historial.
+    # NO se permite dejar la caja en negativo con un gasto.
+    # ------------------------------------------------------------------
+    def gasto(self, nombre, desc, monto) -> dict:
+        """Registra un egreso y descuenta el valor de caja (CU11).
+
+        Retorno: {"ok": bool, "mensaje": str, "datos": GastoSecundario|None}
+        """
+        try:
+            montoValido = self._validarMonto(monto)
+            if montoValido > self.sesionActiva.caja:
+                raise SaldoInsuficiente(
+                    "No hay saldo suficiente en caja para el gasto."
+                )
+            cajaNueva = round(self.sesionActiva.caja - montoValido, 2)
+            gasto = self.servVenta.registrarGasto(
+                self.sesionActiva.idSesion, nombre, montoValido, desc,
+                cajaNueva,
+            )
+            self.sesionActiva.caja = cajaNueva
+            return {
+                "ok": True,
+                "mensaje": "Gasto registrado correctamente.",
+                "datos": gasto,
+            }
+        except AppError as err:
+            log.error("%s: %s", type(err).__name__, err, exc_info=True)
+            return {"ok": False, "mensaje": str(err), "datos": None}
+
+    def reinsertar(self, nombre, desc, monto) -> dict:
+        """Registra una reinserción de dinero y suma a caja (CU11).
+
+        Retorno: {"ok": bool, "mensaje": str, "datos": GastoSecundario|None}
+        """
+        try:
+            montoValido = self._validarMonto(monto)
+            cajaNueva = round(self.sesionActiva.caja + montoValido, 2)
+            gasto = self.servVenta.registrarReinsercion(
+                self.sesionActiva.idSesion, nombre, montoValido, desc,
+                cajaNueva,
+            )
+            self.sesionActiva.caja = cajaNueva
+            return {
+                "ok": True,
+                "mensaje": "Reinserción registrada correctamente.",
+                "datos": gasto,
+            }
+        except AppError as err:
+            log.error("%s: %s", type(err).__name__, err, exc_info=True)
+            return {"ok": False, "mensaje": str(err), "datos": None}
+# ------------------------------------------------------------------
+    # CU12: verHistorial()
+    # Renderiza la lista de ventas y gastos registrados en una lista única
+    # de movimientos ordenada cronológica descendente (más reciente
+    # primero). Ventas con detalles [{nombre, cantidad, monto}]; gastos
+    # identificados por tipo ('gasto'/'reinsertar') según el signo.
+    # ------------------------------------------------------------------
+    def verHistorial(self) -> dict:
+        """Devuelve los movimientos de la sesión (ventas + gastos) (CU12).
+
+        Retorno: {"ok": bool, "mensaje": str, "datos": [dict, ...]}
+        """
+        try:
+            idSesion = self.sesionActiva.idSesion
+            ventas = self.servVenta.verVentas(idSesion)
+            gastos = self.servVenta.verGastos(idSesion)
+            nombres = {
+                p.idProducto: p.nombre
+                for p in self.servProd.verProductos(idSesion)
+            }
+
+            movimientos = []
+            for venta in ventas:
+                detalles = [
+                    {
+                        "nombre": nombres.get(d.idProducto, "Producto"),
+                        "cantidad": d.cantidad,
+                        "monto": d.monto,
+                    }
+                    for d in venta.detalles
+                ]
+                movimientos.append({
+                    "tipo": "venta",
+                    "fechaHora": venta.fechaHora,
+                    "montoNeto": venta.montoNeto,
+                    "detalles": detalles,
+                })
+            for gasto in gastos:
+                tipo = "reinsertar" if gasto.monto >= 0 else "gasto"
+                movimientos.append({
+                    "tipo": tipo,
+                    "fechaHora": gasto.fechaHora,
+                    "montoNeto": round(abs(gasto.monto), 2),
+                    "nombre": gasto.nombre,
+                    "descripcion": gasto.descripcion,
+                })
+
+            # Orden cronológico descendente (más reciente primero).
+            movimientos.sort(key=lambda m: m["fechaHora"], reverse=True)
+            return {
+                "ok": True,
+                "mensaje": "Historial actualizado.",
+                "datos": movimientos,
             }
         except AppError as err:
             log.error("%s: %s", type(err).__name__, err, exc_info=True)
