@@ -1,3 +1,9 @@
+[2026-09-12] Agente 1 (Modelo)
+- Implementado acceso/mainDAO.py: conexión compartida (conn/cursor a nivel de clase), esquema completo de 5 tablas (Sesion, Producto, Venta, DetalleVenta, GastoSecundario) con FKs ON DELETE CASCADE, PRAGMA foreign_keys y 5 índices.
+- Implementados CU1 (crearSesion) y CU2 (obtenerSesion) con el contrato acordado: tupla (ID_sesion, Fecha_inicio, Fondo_inicial, Caja, Pass). CU3 (cerrarSesion) es solo estado en memoria del controlador (Agente 3), no toca la bd.
+- Regla clave cumplida: captura de sqlite3.Error, ROLLBACK y re-elevación como PersistenceError con logging a plato.log.
+- La base bd.db se genera automáticamente al primer arranque (CU1) de forma idempotente. nuke/exportar/importar (CU13-CU17) quedan pendientes por decisión acordada.
+- Verificación manual exitosa (esquema, crear/obtener sesión, PRAGMA, índices) y tests de sesión 11/11 en verde.
 [2026-09-12] Agente 3 (Controlador y Servicios)
 - Implementados CU9 (agregarProd/quitarProd con botones +/-), CU10 (confirmarVenta), CU11 (gasto y reinsertar) y CU12 (verHistorial).
 - Reglas acordadas: agregarProd no supera el stock disponible; quitarProd elimina el ítem al llegar a 0; confirmarVenta vacía el carrito y falla con carrito vacío; servVenta valida stock suficiente antes de persistir.
