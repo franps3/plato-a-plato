@@ -1,3 +1,9 @@
+[2026-09-13] Agente 1 (Modelo)
+- Implementados acceso/prodDAO.py y acceso/stockDAO.py con los DAOs reales para CU4 (crearProducto), CU5 (verProductos), CU7 (editarProducto/editarStock) y CU8 (eliminarProducto). CU6 quedó como tarea visual del Agente 2, sin lógica de modelo.
+- verProductos ordena alfabéticamente por nombre sin distinguir mayúsculas (ORDER BY Nombre COLLATE NOCASE), decisión acordada con el usuario.
+- Regla clave cumplida en ambos DAOs: captura de sqlite3.Error, ROLLBACK vía mainDAO._manejarError y re-elevación como PersistenceError con logging a plato.log; operan sobre la conexión compartida de mainDAO y la misma tabla Producto (columna Stock).
+- Creado tests/test_daos_productos.py: 15 tests de integración contra SQLite temporal (fixture que redirige RUTA_BD con monkeypatch y resetea el singleton conn/cursor), cubriendo CU4/CU5/CU7/CU8 y descontar (CU10). No tocan bd.db real.
+- Suite completa 56 tests: 55 en verde. test_cu12_historialMezclaVentasYGastos (CU12, Agente 3) falla de forma PREEXISTENTE (verificado con git stash), no relacionado con CU4-CU8.
 [2026-09-12] Agente 1 (Modelo)
 - Implementado acceso/mainDAO.py: conexión compartida (conn/cursor a nivel de clase), esquema completo de 5 tablas (Sesion, Producto, Venta, DetalleVenta, GastoSecundario) con FKs ON DELETE CASCADE, PRAGMA foreign_keys y 5 índices.
 - Implementados CU1 (crearSesion) y CU2 (obtenerSesion) con el contrato acordado: tupla (ID_sesion, Fecha_inicio, Fondo_inicial, Caja, Pass). CU3 (cerrarSesion) es solo estado en memoria del controlador (Agente 3), no toca la bd.
