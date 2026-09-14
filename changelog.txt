@@ -1,3 +1,13 @@
+[2026-09-14] Agente 1 (Modelo)
+- Implementado acceso/ventaDAO.py con los DAOs reales de CU10 (registrarVenta), CU11 (registrarGasto), CU12 (verVentas/verGastos) y CU14 (borrarHistorial). CU9 no requiere lógica de modelo: el carrito es estado del controlador y la validación de stock usa stockDAO.verStock ya existente.
+- registrarVenta persiste Venta + DetalleVenta (executemany) y ACTUALIZA Sesion.Caja a cajaNueva en la misma transacción. montoNeto NO se persiste: Venta no tiene columna de monto en el MER y el total se recalcula desde los detalles.
+- registrarGasto persiste el monto FIRMADO (negativo = gasto, positivo = reinserción) y actualiza Sesion.Caja en la misma transacción.
+- verVentas agrupa los detalles con UNA única consulta JOIN (evita N+1); verGastos devuelve las filas ordenadas por fecha.
+- borrarHistorial (CU14) elimina las ventas (detalles por FK ON DELETE CASCADE) y los gastos de la sesión sin alterar Sesion.Caja ni Producto.Stock; devuelve la cantidad de ventas borradas (contrato acordado con el Agente 3). El Agente 3 debe implementar servVenta.borrarHistorial y controlador.borrarHistorial sobre este método.
+- Regla clave cumplida en los 5 métodos: captura de sqlite3.Error, ROLLBACK vía mainDAO._manejarError y re-elevación como PersistenceError con logging a plato.log.
+- Ampliado tests/fakeMainDAO.py con FakeVentaDAO.borrarHistorial para mantener la paridad de contrato (así el Agente 3 puede testear CU14 con fakes).
+- Creado tests/test_daos_ventas.py: 11 tests de integración contra SQLite temporal (fixture que redirige RUTA_BD con monkeypatch), cubriendo CU10/CU11/CU12/CU14. No tocan bd.db real.
+- Suite completa: 67 tests, 66 en verde. Sigue en rojo SOLO test_cu12_historialMezclaVentasYGastos (CU12, Agente 3, corre contra fakes): rojo PREEXISTENTE ya documentado en el commit anterior y ajeno a estos cambios.
 [2026-09-13] Agente 1 (Modelo)
 - Implementados acceso/prodDAO.py y acceso/stockDAO.py con los DAOs reales para CU4 (crearProducto), CU5 (verProductos), CU7 (editarProducto/editarStock) y CU8 (eliminarProducto). CU6 quedó como tarea visual del Agente 2, sin lógica de modelo.
 - verProductos ordena alfabéticamente por nombre sin distinguir mayúsculas (ORDER BY Nombre COLLATE NOCASE), decisión acordada con el usuario.

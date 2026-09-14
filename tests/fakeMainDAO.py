@@ -167,3 +167,20 @@ class FakeVentaDAO:
             for g in self._gastos.values()
             if g[1] == idSesion
         ]
+    def borrarHistorial(self, idSesion) -> int:
+        """Borra ventas y gastos de la sesión; devuelve ventas borradas (CU14).
+
+        Replica el contrato del Agente 1: NO altera el stock (tabla
+        productos del FakeBD) ni la caja (sesión simulada).
+        """
+        ventasABorrar = [
+            v for v in self._ventas.values() if v[1] == idSesion
+        ]
+        for v in ventasABorrar:
+            del self._ventas[v[0]]
+        self._gastos = {
+            idGasto: g
+            for idGasto, g in self._gastos.items()
+            if g[1] != idSesion
+        }
+        return len(ventasABorrar)
