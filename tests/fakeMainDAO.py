@@ -17,6 +17,10 @@ class FakeBD:
         self._proximoIdSesion = 1
         self.productos = {}  # idProducto -> [id, idSesion, nombre, precio, stock]
         self._proximoIdProducto = 1
+        self.ventas = {}     # idVenta -> [id, idSesion, fechaHora, montoNeto, detalles]
+        self._proximoIdVenta = 1
+        self.gastos = {}     # idGasto -> [id, idSesion, nombre, monto, descripcion, fechaHora]
+        self._proximoIdGasto = 1
 
 
 class FakeMainDAO:
@@ -35,6 +39,17 @@ class FakeMainDAO:
     def obtenerSesion(self):
         """Devuelve la tupla de la sesión simulada o None si no existe."""
         return self._bd.sesion
+
+    def nuke(self):
+        """Borra la sesión, productos, ventas y gastos (CU15 reiniciar)."""
+        self._bd.sesion = None
+        self._bd._proximoIdSesion = 1
+        self._bd.productos = {}
+        self._bd._proximoIdProducto = 1
+        self._bd.ventas = {}
+        self._bd._proximoIdVenta = 1
+        self._bd.gastos = {}
+        self._bd._proximoIdGasto = 1
 
 
 class FakeProdDAO:
@@ -110,14 +125,12 @@ class FakeVentaDAO:
 
     Replica el contrato acordado: la caja de la sesión se persiste dentro
     de la misma operación que registra la venta o el gasto/reinserción.
+    Usa el estado compartido de FakeBD (ventas y gastos) para que
+    mainDAO.nuke() pueda limpiarlo todo.
     """
 
     def __init__(self, bd=None):
         self._bd = bd if bd is not None else FakeBD()
-        self._ventas = {}   # id -> [id, idSesion, fechaHora, montoNeto, detalles]
-        self._gastos = {}   # id -> [id, idSesion, nombre, monto, descripcion, fechaHora]
-        self._proximoIdVenta = 1
-        self._proximoIdGasto = 1
 
     def _actualizarCaja(self, cajaNueva):
         """Actualiza la columna Caja de la sesión simulada."""
@@ -129,9 +142,9 @@ class FakeVentaDAO:
     def registrarVenta(self, idSesion, fechaHora, detalles, montoNeto,
                        cajaNueva) -> int:
         """Persiste venta + detalles + caja; devuelve ID_venta."""
-        idVenta = self._proximoIdVenta
-        self._proximoIdVenta += 1
-        self._ventas[idVenta] = [
+        idVenta = self._bd._proximoIdVenta
+        self._bd._proximoIdVenta += 1
+        self._bd.ventas[idVenta] = [
             idVenta, idSesion, fechaHora, montoNeto, list(detalles)
         ]
         self._actualizarCaja(cajaNueva)
@@ -140,9 +153,9 @@ class FakeVentaDAO:
     def registrarGasto(self, idSesion, nombre, monto, descripcion,
                        fechaHora, cajaNueva) -> int:
         """Persiste gasto/reinserción + caja; devuelve ID_gasto."""
-        idGasto = self._proximoIdGasto
-        self._proximoIdGasto += 1
-        self._gastos[idGasto] = [
+        idGasto = self._bd._proximoIdGasto
+        self._bd._proximoIdGasto += 1
+        self._bd.gastos[idGasto] = [
             idGasto, idSesion, nombre, monto, descripcion, fechaHora
         ]
         self._actualizarCaja(cajaNueva)
@@ -154,7 +167,7 @@ class FakeVentaDAO:
         """
         return [
             (v[0], v[2], v[4])
-            for v in self._ventas.values()
+            for v in self._bd.ventas.values()
             if v[1] == idSesion
         ]
 
@@ -164,9 +177,10 @@ class FakeVentaDAO:
         """
         return [
             (g[0], g[2], g[3], g[4], g[5])
-            for g in self._gastos.values()
+            for g in self._bd.gastos.values()
             if g[1] == idSesion
         ]
+
     def borrarHistorial(self, idSesion) -> int:
         """Borra ventas y gastos de la sesión; devuelve ventas borradas (CU14).
 
@@ -174,13 +188,13 @@ class FakeVentaDAO:
         productos del FakeBD) ni la caja (sesión simulada).
         """
         ventasABorrar = [
-            v for v in self._ventas.values() if v[1] == idSesion
+            v for v in self._bd.ventas.values() if v[1] == idSesion
         ]
         for v in ventasABorrar:
-            del self._ventas[v[0]]
-        self._gastos = {
+            del self._bd.ventas[v[0]]
+        self._bd.gastos = {
             idGasto: g
-            for idGasto, g in self._gastos.items()
+            for idGasto, g in self._bd.gastos.items()
             if g[1] != idSesion
         }
         return len(ventasABorrar)

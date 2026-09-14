@@ -32,9 +32,10 @@
 ### Parámetros de desarrollo
 
 - Código claro, legible, en español y comentado por función y módulo  
-- camelCase para variables, funciones y módulos.  
+- camelCase para variables, funciones y módulos 
 - PascalCase para entidades de bd
-- Formato de commits "CUx, CUxx, agente x". Por cada commit escribir en changelog.txt fecha del commit, agente responsable y un breve resumen de lo que se hizo.
+- Una vez completada una tarea realizar commit y push
+- Formato de commits "CUx, CUxx, agente x". Por cada commit escribir en changelog.txt fecha del commit, agente responsable y un breve resumen de lo que se hizo
 
 ### MER  
 **Tablas y atributos  

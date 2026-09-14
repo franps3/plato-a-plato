@@ -171,3 +171,10 @@ class ServVenta:
             )
             for f in self.ventaDAO.verGastos(idSesion)
         ]
+
+    def borrarHistorial(self, idSesion) -> None:
+        """Borra ventas, detalles y gastos de la sesión (CU14).
+
+        Conserva productos y sesión; el stock queda intacto.
+        """
+        self.ventaDAO.borrarHistorial(idSesion)

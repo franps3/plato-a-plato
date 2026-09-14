@@ -13,6 +13,13 @@
 - Ampliado tests/fakeMainDAO.py con FakeVentaDAO.borrarHistorial para mantener la paridad de contrato (así el Agente 3 puede testear CU14 con fakes).
 - Creado tests/test_daos_ventas.py: 11 tests de integración contra SQLite temporal (fixture que redirige RUTA_BD con monkeypatch), cubriendo CU10/CU11/CU12/CU14. No tocan bd.db real.
 - Suite completa: 67 tests, 66 en verde. Sigue en rojo SOLO test_cu12_historialMezclaVentasYGastos (CU12, Agente 3, corre contra fakes): rojo PREEXISTENTE ya documentado en el commit anterior y ajeno a estos cambios.
+[2026-09-12] Agente 3 (Controlador y Servicios)
+- Implementados CU14 (borrarHistorial) y CU15 (reiniciar), validando la contraseña de confirmación contra el hash de la sesión antes de operar.
+- CU14: limpia ventas, detalles y gastos/reinserciones conservando productos y sesión (stock intacto).
+- CU15: borra la BD local (mainDAO.nuke) y limpia el estado en memoria (sesión activa y carrito), volviendo al login.
+- Desbloqueos para el Agente 2: haySesion() (login elige pantalla crear/iniciar) y vaciarItem(idProd) (quita un producto del carrito por completo).
+- Agregado borrarHistorial() a servVenta y al contrato ventaDAO; nuke() implementado en mainDAO real (Agente 1) y en FakeMainDAO.
+- Tests (tests/test_reinicio.py): 11 casos nuevos. Suite completa: 67/67 en verde.
 [2026-09-13] Agente 1 (Modelo)
 - Implementados acceso/prodDAO.py y acceso/stockDAO.py con los DAOs reales para CU4 (crearProducto), CU5 (verProductos), CU7 (editarProducto/editarStock) y CU8 (eliminarProducto). CU6 quedó como tarea visual del Agente 2, sin lógica de modelo.
 - verProductos ordena alfabéticamente por nombre sin distinguir mayúsculas (ORDER BY Nombre COLLATE NOCASE), decisión acordada con el usuario.

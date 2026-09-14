@@ -584,3 +584,110 @@ class Controlador:
         except AppError as err:
             log.error("%s: %s", type(err).__name__, err, exc_info=True)
             return {"ok": False, "mensaje": str(err), "datos": None}
+# ------------------------------------------------------------------
+    # Auxiliar para la vista de login (bloqueo del Agente 2)
+    # ------------------------------------------------------------------
+    def haySesion(self) -> dict:
+        """Comprueba si existe una sesión en la base de datos (login).
+
+        No valida la contraseña: solo indica si hay una sesión creada,
+        para que la vista muestre la pantalla correcta (crear o iniciar).
+
+        Retorno: {"ok": bool, "mensaje": str, "datos": bool|None}
+        """
+        try:
+            return {
+                "ok": True,
+                "mensaje": "Consulta de sesión realizada.",
+                "datos": self.dao.obtenerSesion() is not None,
+            }
+        except AppError as err:
+            log.error("%s: %s", type(err).__name__, err, exc_info=True)
+            return {"ok": False, "mensaje": str(err), "datos": None}
+
+    # ------------------------------------------------------------------
+    # CU9 (complemento): vaciarItem(idProducto)
+    # Quita un producto POR COMPLETO del carrito sin restar de a uno.
+    # Requerido por el Agente 2 para la vista de venta.
+    # ------------------------------------------------------------------
+    def vaciarItem(self, idProducto) -> dict:
+        """Elimina un producto del carrito por completo (bloqueo Agente 2).
+
+        Retorno: {"ok": bool, "mensaje": str, "datos": int|None}
+        """
+        try:
+            self.carrito.pop(idProducto, None)
+            return {
+                "ok": True,
+                "mensaje": "Producto eliminado del carrito.",
+                "datos": 0,
+            }
+        except AppError as err:
+            log.error("%s: %s", type(err).__name__, err, exc_info=True)
+            return {"ok": False, "mensaje": str(err), "datos": None}
+
+    # ------------------------------------------------------------------
+    # CU14: borrarHistorial(password)
+    # Ingresa la contraseña de confirmación; si es correcta, limpia el
+    # registro de movimientos (ventas, detalles y gastos/reinserciones)
+    # sin alterar el stock ni la sesión. Si la contraseña no coincide,
+    # no se borra nada.
+    # ------------------------------------------------------------------
+    def borrarHistorial(self, password) -> dict:
+        """Descarta el historial de movimientos de la sesión (CU14).
+
+        Retorno: {"ok": bool, "mensaje": str, "datos": None}
+        """
+        try:
+            self._validarPassword(password)
+            idSesion = self.sesionActiva.idSesion
+            sesionBd = self.dao.obtenerSesion()
+            if sesionBd is None:
+                raise SesionNoEncontrada(
+                    "No hay una sesión registrada. Cree una sesión primero."
+                )
+            if sesionBd[4] != self.hashearPassword(password):
+                raise CredencialInvalida("Contraseña incorrecta.")
+
+            self.servVenta.borrarHistorial(idSesion)
+            return {
+                "ok": True,
+                "mensaje": "Historial descartado correctamente.",
+                "datos": None,
+            }
+        except AppError as err:
+            log.error("%s: %s", type(err).__name__, err, exc_info=True)
+            return {"ok": False, "mensaje": str(err), "datos": None}
+# ------------------------------------------------------------------
+    # CU15: reiniciar(password)
+    # Ingresa la contraseña de confirmación; si es correcta, borra la
+    # sesión y la BD local, restaurando la aplicación a cero (nuke).
+    # Tras reiniciar se limpia el estado en memoria y la vista vuelve
+    # a la pantalla de creación de sesión.
+    # ------------------------------------------------------------------
+    def reiniciar(self, password) -> dict:
+        """Reinicia el sistema: borra la BD local y la sesión (CU15).
+
+        Retorno: {"ok": bool, "mensaje": str, "datos": None}
+        """
+        try:
+            self._validarPassword(password)
+            sesionBd = self.dao.obtenerSesion()
+            if sesionBd is None:
+                raise SesionNoEncontrada(
+                    "No hay una sesión registrada. Cree una sesión primero."
+                )
+            if sesionBd[4] != self.hashearPassword(password):
+                raise CredencialInvalida("Contraseña incorrecta.")
+
+            self.dao.nuke()
+            self.sesionActiva = None
+            self.carrito = {}
+            return {
+                "ok": True,
+                "mensaje": "Sistema reiniciado correctamente.",
+                "datos": None,
+            }
+        except AppError as err:
+            log.error("%s: %s", type(err).__name__, err, exc_info=True)
+            return {"ok": False, "mensaje": str(err), "datos": None}

@@ -178,3 +178,22 @@ class mainDAO:
             return tuple(fila) if fila is not None else None
         except sqlite3.Error as err:
             mainDAO._manejarError(err)
+
+    @staticmethod
+    def nuke():
+        """Borra la sesión y toda la base de datos local (CU15 reiniciar).
+
+        Elimina todos los datos (sesión, productos, ventas, detalles y
+        gastos) restaurando la aplicación a cero. El archivo bd.db y el
+        esquema se conservan para la próxima creación de sesión.
+        """
+        mainDAO.conectar()
+        try:
+            mainDAO.cursor.execute("DELETE FROM DetalleVenta")
+            mainDAO.cursor.execute("DELETE FROM Venta")
+            mainDAO.cursor.execute("DELETE FROM GastoSecundario")
+            mainDAO.cursor.execute("DELETE FROM Producto")
+            mainDAO.cursor.execute("DELETE FROM Sesion")
+            mainDAO.conn.commit()
+        except sqlite3.Error as err:
+            mainDAO._manejarError(err)
