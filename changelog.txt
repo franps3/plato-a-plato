@@ -1,3 +1,8 @@
+[2026-09-14] Agente 1 (Modelo) — Fix CU12
+- Corregido el rojo preexistente test_cu12_historialMezclaVentasYGastos en control/servVenta.py.
+- Causa raíz: datetime.now() con resolución de microsegundos podía generar el MISMO timestamp para una venta y un gasto consecutivos; el sort estable de verHistorial los dejaba en orden de inserción (venta antes que gasto).
+- Solución: nuevo método _nuevaFechaHora() genera timestamps estrictamente crecientes: si la nueva marca es <= a la última generada, avanza un microsegundo sobre ella. Se usa tanto en registrarVenta como en los movimientos de caja (gasto/reinserción), por lo que el orden cronológico del historial (CU12) queda garantizado con DAOs reales y fakes.
+- Suite completa: 67/67 tests en verde.
 [2026-09-14] Agente 1 (Modelo)
 - Implementado acceso/ventaDAO.py con los DAOs reales de CU10 (registrarVenta), CU11 (registrarGasto), CU12 (verVentas/verGastos) y CU14 (borrarHistorial). CU9 no requiere lógica de modelo: el carrito es estado del controlador y la validación de stock usa stockDAO.verStock ya existente.
 - registrarVenta persiste Venta + DetalleVenta (executemany) y ACTUALIZA Sesion.Caja a cajaNueva en la misma transacción. montoNeto NO se persiste: Venta no tiene columna de monto en el MER y el total se recalcula desde los detalles.

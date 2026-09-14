@@ -6,7 +6,7 @@
 # Decisión acordada: ventaDAO persiste la Caja de la sesión dentro de la
 # MISMA transacción que registra la venta o el gasto/reinserción.
 
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from .excepciones import ProductoNoEncontrado, StockInsuficiente
 from .modelos import DetalleVenta, GastoSecundario, Venta
@@ -18,6 +18,28 @@ class ServVenta:
     def __init__(self, ventaDAO, stockDAO):
         self.ventaDAO = ventaDAO
         self.stockDAO = stockDAO
+        # Marca de tiempo del último movimiento: garantiza el orden
+        # cronológico del historial (CU12).
+        self._ultimaFechaHora = None
+
+    def _nuevaFechaHora(self) -> str:
+        """Genera un timestamp estrictamente creciente (CU12).
+
+        Si dos operaciones ocurren dentro del mismo microsegundo, se
+        avanza un microsegundo sobre la marca anterior para preservar
+        el orden cronológico del historial.
+        """
+        fechaHora = datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")
+        if (self._ultimaFechaHora is not None
+                and fechaHora <= self._ultimaFechaHora):
+            base = datetime.strptime(
+                self._ultimaFechaHora, "%Y-%m-%d %H:%M:%S.%f"
+            )
+            fechaHora = (base + timedelta(microseconds=1)).strftime(
+                "%Y-%m-%d %H:%M:%S.%f"
+            )
+        self._ultimaFechaHora = fechaHora
+        return fechaHora
 
     # ------------------------------------------------------------------
     # CU10: registrarVenta
@@ -36,10 +58,8 @@ class ServVenta:
                 (con precio unitario actual).
             cajaNueva: Nuevo saldo de caja tras sumar el total de la venta.
         """
-        # Timestamp con microsegundos: garantiza el orden cronológico de los
-        # movimientos en el historial (CU12) aunque ocurran en el mismo
-        # segundo. Los strings siguen siendo comparables cronológicamente.
-        fechaHora = datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")
+        # Marca de tiempo estrictamente creciente (CU12).
+        fechaHora = self._nuevaFechaHora()
         for detalle in detalles:
             stock = self.stockDAO.verStock(detalle.idProducto)
             if stock is None:
@@ -97,10 +117,8 @@ class ServVenta:
     def _registrarMovimientoCaja(self, idSesion, nombre, montoFirmado,
                                  descripcion, cajaNueva) -> GastoSecundario:
         """Registra un gasto o reinserción en la caja (CU11)."""
-        # Timestamp con microsegundos: garantiza el orden cronológico de los
-        # movimientos en el historial (CU12) aunque ocurran en el mismo
-        # segundo. Los strings siguen siendo comparables cronológicamente.
-        fechaHora = datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")
+        # Marca de tiempo estrictamente creciente (CU12).
+        fechaHora = self._nuevaFechaHora()
         idGasto = self.ventaDAO.registrarGasto(
             idSesion, nombre, montoFirmado, descripcion, fechaHora, cajaNueva
         )
