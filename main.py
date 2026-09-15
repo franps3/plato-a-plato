@@ -1,12 +1,24 @@
 # Módulo main.py
 # Punto de entrada de la aplicación "Plato a Plato".
-# Stub de arranque del Agente 3: instancia el controlador y verifica que la
-# capa de control esté operativa antes de que Agente 2 conecte las vistas.
-# La UI final (CustomTkinter) la construirá el Agente 2 en /vistas.
+# Instancia el controlador y lanza la interfaz gráfica (shell de navegación
+# del Agente 2), que arranca en el gestor de sesión.
+#
+# La lógica de negocio vive en la capa de control (Agente 3) y de acceso
+# (Agente 1); main.py sólo compone la aplicación.
 
 from control.controlador import Controlador
 
-if __name__ == "__main__":
+
+def main():
+    """Compone controlador + interfaz y arranca el loop de CustomTkinter."""
     controlador = Controlador()
-    print("Aplicación 'Plato a Plato' inicializada. (vista pendiente del Agente 2)")
-    print("¿Sesión activa?", controlador.estaAutenticado())
+
+    # Import local: evita cargar Tkinter al importar main.py desde pruebas.
+    from vistas.menu import Aplicacion
+
+    app = Aplicacion(controlador)
+    app.mainloop()
+
+
+if __name__ == "__main__":
+    main()

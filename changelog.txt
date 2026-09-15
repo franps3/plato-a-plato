@@ -20,6 +20,15 @@
 - Desbloqueos para el Agente 2: haySesion() (login elige pantalla crear/iniciar) y vaciarItem(idProd) (quita un producto del carrito por completo).
 - Agregado borrarHistorial() a servVenta y al contrato ventaDAO; nuke() implementado en mainDAO real (Agente 1) y en FakeMainDAO.
 - Tests (tests/test_reinicio.py): 11 casos nuevos. Suite completa: 67/67 en verde.
+[2026-09-13] Agente 2 (Vista)
+- Configurado el entorno: pip install -r requirements.txt (customtkinter 5.2.2, CTkMessagebox 2.7, Pillow 11.3.0, openpyxl 3.1.5, pyinstaller 6.22.3, pytest 9.1.1); imports verificados y main.py operativo.
+- Creados módulos compartidos de UI: vistas/estilos.py (paleta violácea y tipografías tomadas de los diseños PNG) y vistas/iconos.py (genera con Pillow los PNG de íconos casa, lupa, carrito, +, -, x en vistas/recursos/, idempotente).
+- Implementado el shell de navegación vistas/menu.py (CTk raíz + barra superior compartida con Home y accesos a Venta, Configuración de Productos, Configuración de Sesión e Historial). Home cierra sesión (CU3) y vuelve al gestor de sesión.
+- Implementada vistas/venta.py según el PNG entregado: barra de búsqueda con filtro LOCAL, botón de carrito y listado de productos (nombre, stock, precio y botón +). Popup "Carrito" con ítems (x cantidad, subtotal, botones -/+/x), banda de Total y botones Confirmar (CU10) / Cancelar (solo cierra).
+- Implementada vistas/login.py provisional (gestor de sesión CU1/CU2) con selector Ingresar / Crear sesión, a la espera del PNG y del método haySesion() del Agente 3.
+- Integrado main.py: instancia el Controlador y lanza Aplicacion (shell) arrancando en el gestor de sesión.
+- Decisiones acordadas con el usuario: botón x del carrito DESHABILITADO hasta que el Agente 3 implemente quitarProdCompleto(); Cancelar no vacía el carrito; Configuración de Sesión e Historial activas con aviso "pendiente Agente 3" (CU13-CU17); la vista lee controlador.carrito directamente (documentado en spec.md).
+- Verificación: compilación OK, smoke test de login y de venta+popup carrito OK, suite completa 56/56 tests en verde (sin regresiones).
 [2026-09-13] Agente 1 (Modelo)
 - Implementados acceso/prodDAO.py y acceso/stockDAO.py con los DAOs reales para CU4 (crearProducto), CU5 (verProductos), CU7 (editarProducto/editarStock) y CU8 (eliminarProducto). CU6 quedó como tarea visual del Agente 2, sin lógica de modelo.
 - verProductos ordena alfabéticamente por nombre sin distinguir mayúsculas (ORDER BY Nombre COLLATE NOCASE), decisión acordada con el usuario.

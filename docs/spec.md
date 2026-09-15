@@ -85,3 +85,12 @@ Los errores específicos heredan de DomainError o PersistenceError (stockInsufic
 
 **Logging  
 Toda excepción capturada en la capa de control/UI debe registrarse mediante el módulo logging de Python en plato.log. El registro incluirá la marca de tiempo, el nombre de la excepción y el stack trace completo con nivel ERROR. Queda prohibido mostrar detalles técnicos del traceback directamente al usuario.  
+
+### Vistas
+
+Gestor de sesión: vista inicial. Si no hay sesión creada se muestra la opción para crear una. Si ya hay una sesión se pide ingreso de contraseña.
+Venta: Lista de todos los productos con y stock y precio y botones para agregar y restar del carrito. Popup para revisar carrito y para confirmar compra.
+Configuración de productos: Lista de productos con stock y precio y opción para editar datos. Botón para agregar producto. Popup para editar producto, para sumar producto y para confirmar eliminación.
+Configuración de sesión: opciones de sesión: importar, exportar, reiniciar sistema y borrar historial. Popup para confirmar decisión
+Historial: Lista de todos los movimientos: gastos con nombre, descripción y monto y ventas con detalles.
+ 

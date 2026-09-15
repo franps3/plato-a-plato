@@ -1,0 +1,207 @@
+# Módulo menu.py (shell de la aplicación)
+# Contenedor principal de las vistas del sistema "Plato a Plato".
+#
+# Responsabilidades (decisiones acordadas con el usuario):
+#   * Crear la ventana raíz (CTk) y el área de contenido intercambiable.
+#   * Armar la BARRA SUPERIOR compartida: botón Home + los accesos a Venta,
+#     Configuración de Productos, Configuración de Sesión e Historial.
+#   * Pantalla inicial: Gestor de Sesión (login). La barra superior sólo se
+#     muestra una vez autenticado.
+#   * Home cierra la sesión (controlador.cerrarSesion) y vuelve al login.
+#   * Configuración de Sesión e Historial dependen del Agente 3 (CU13-CU17):
+#     se muestran ACTIVAS pero con un aviso "pendiente Agente 3".
+#
+# Regla de rol: cero lógica operativa. Sólo orquesta pantallas y delega en
+# las vistas y el controlador.
+
+import customtkinter as ctk
+from PIL import Image
+
+from . import estilos
+from .iconos import obtenerIconos
+
+# Ancho/alto de la ventana raíz.
+ANCHO_VENTANA = 1080
+ALTO_VENTANA = 620
+
+
+class VistaPendiente(ctk.CTkFrame):
+    """Pantalla informativa para módulos aún no disponibles."""
+
+    def __init__(self, master, titulo, detalle):
+        super().__init__(master, fg_color=estilos.FONDO)
+        contenedor = ctk.CTkFrame(
+            self, fg_color=estilos.FONDO_PANEL,
+            corner_radius=estilos.RADIO,
+        )
+        contenedor.place(relx=0.5, rely=0.5, anchor="center")
+        ctk.CTkLabel(
+            contenedor, text=titulo, font=estilos.F_TITULO,
+            text_color=estilos.TEXTO_CLARO,
+        ).pack(padx=48, pady=(28, 8))
+        ctk.CTkLabel(
+            contenedor, text=detalle, font=estilos.F_NORMAL,
+            text_color=estilos.TEXTO_TENUE, wraplength=520, justify="center",
+        ).pack(padx=48, pady=(0, 28))
+
+
+class Aplicacion(ctk.CTk):
+    """Ventana raíz: maneja la navegación entre las vistas del sistema."""
+
+    def __init__(self, controlador):
+        super().__init__()
+        self.controlador = controlador
+
+        self.title("Plato a Plato")
+        self.geometry(f"{ANCHO_VENTANA}x{ALTO_VENTANA}")
+        self.minsize(900, 560)
+        self.configure(fg_color=estilos.FONDO)
+
+        # Estado de navegación.
+        self.vistaActual = None
+        self.nombreVista = None
+
+        self._cargarIconos()
+        self._construirBarra()
+        self._construirContenido()
+
+        # Pantalla inicial: gestor de sesión.
+        self.mostrarLogin()
+
+    # ------------------------------------------------------------------
+    # Recursos
+    # ------------------------------------------------------------------
+    def _cargarIconos(self):
+        """Carga los CTkImage que usa la barra superior."""
+        rutas = obtenerIconos()
+        self.iconoHome = ctk.CTkImage(
+            light_image=Image.open(rutas["casa"]), size=(26, 26)
+        )
+
+    # ------------------------------------------------------------------
+    # Construcción de la interfaz
+    # ------------------------------------------------------------------
+    def _construirBarra(self):
+        """Crea la barra superior (oculta hasta autenticar)."""
+        self.barra = ctk.CTkFrame(self, fg_color=estilos.FONDO_BARRA, height=64)
+        # No se empaqueta acá: se hace al autenticar.
+
+        # Botón Home (izquierda).
+        self.botonHome = ctk.CTkButton(
+            self.barra, text="", image=self.iconoHome, width=52, height=44,
+            fg_color=estilos.BOTON_CLARO, hover_color=estilos.BOTON_CLARO_HOVER,
+            corner_radius=estilos.RADIO, command=self._home,
+        )
+        self.botonHome.pack(side="left", padx=(18, 8), pady=10)
+
+        # Botones de navegación (centro).
+        self.botonesNav = {}
+        definiciones = [
+            ("venta", "Venta", lambda: self.mostrarVenta()),
+            ("configProd", "Configuración de\nProductos",
+             lambda: self.mostrarPendiente(
+                 "configProd", "Configuración de Productos")),
+            ("configSesion", "Configuración de\nSesión",
+             lambda: self.mostrarPendiente(
+                 "configSesion", "Configuración de Sesión")),
+            ("historial", "Historial",
+             lambda: self.mostrarPendiente(
+                 "historial", "Historial")),
+        ]
+        for clave, etiqueta, accion in definiciones:
+            boton = ctk.CTkButton(
+                self.barra, text=etiqueta, font=estilos.F_PEQUENA,
+                width=132, height=44,
+                fg_color=estilos.BOTON_BARRA,
+                hover_color=estilos.BOTON_BARRA_HOVER,
+                corner_radius=estilos.RADIO, command=accion,
+            )
+            boton.pack(side="left", padx=6, pady=10)
+            self.botonesNav[clave] = boton
+
+    def _construirContenido(self):
+        """Crea el contenedor donde se intercambian las vistas."""
+        self.contenido = ctk.CTkFrame(self, fg_color=estilos.FONDO)
+        self.contenido.pack(fill="both", expand=True)
+
+    # ------------------------------------------------------------------
+    # Cambio de vistas
+    # ------------------------------------------------------------------
+    def _limpiarContenido(self):
+        """Destruye la vista actual para liberar el contenedor."""
+        if self.vistaActual is not None:
+            self.vistaActual.destroy()
+            self.vistaActual = None
+
+    def _resaltarBoton(self, clave):
+        """Resalta el botón de la vista activa en la barra superior."""
+        for c, boton in self.botonesNav.items():
+            color = (
+                estilos.BOTON_BARRA_ACTIVO if c == clave
+                else estilos.BOTON_BARRA
+            )
+            boton.configure(fg_color=color)
+
+    def _entrarModoApp(self):
+        """Muestra la barra superior (usuario autenticado)."""
+        if not self.barra.winfo_ismapped():
+            self.barra.pack(fill="x", before=self.contenido)
+
+    def _salirModoApp(self):
+        """Oculta la barra superior (vuelta al login)."""
+        if self.barra.winfo_ismapped():
+            self.barra.pack_forget()
+
+    # ------------------------------------------------------------------
+    # Pantallas
+    # ------------------------------------------------------------------
+    def mostrarLogin(self):
+        """Muestra el gestor de sesión como pantalla inicial."""
+        # Import local para evitar ciclos de importación.
+        from .login import VistaLogin
+
+        self._limpiarContenido()
+        self._salirModoApp()
+        self.nombreVista = "login"
+        self.vistaActual = VistaLogin(
+            self.contenido, self.controlador, alAutenticar=self._alAutenticar
+        )
+        self.vistaActual.pack(fill="both", expand=True)
+
+    def _alAutenticar(self, _sesion):
+        """Callback invocado por el login al autenticar con éxito."""
+        self._entrarModoApp()
+        self.mostrarVenta()
+
+    def mostrarVenta(self):
+        """Muestra la pantalla de Venta (CU5, CU9, CU10)."""
+        from .venta import VistaVenta
+
+        self._entrarModoApp()
+        self._limpiarContenido()
+        self.nombreVista = "venta"
+        self.vistaActual = VistaVenta(self.contenido, self.controlador)
+        self.vistaActual.pack(fill="both", expand=True)
+        self._resaltarBoton("venta")
+
+    def mostrarPendiente(self, clave, titulo):
+        """Muestra una pantalla de aviso para módulos aún no disponibles."""
+        detalle = (
+            "Esta sección estará disponible cuando el Agente 3 implemente "
+            "los casos de uso CU13-CU17 (exportar, importar, reiniciar, "
+            "borrar historial y ver historial)."
+        )
+        self._entrarModoApp()
+        self._limpiarContenido()
+        self.nombreVista = clave
+        self.vistaActual = VistaPendiente(self.contenido, titulo, detalle)
+        self.vistaActual.pack(fill="both", expand=True)
+        self._resaltarBoton(clave)
+
+    # ------------------------------------------------------------------
+    # Home
+    # ------------------------------------------------------------------
+    def _home(self):
+        """Cierra la sesión y vuelve al gestor de sesión."""
+        self.controlador.cerrarSesion()
+        self.mostrarLogin()
