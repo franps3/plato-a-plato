@@ -8,6 +8,10 @@
 #   Sesion:  (ID_sesion, Fecha_inicio, Fondo_inicial, Caja, Pass)
 #   Producto:[ID_producto, ID_sesion, Nombre, Precio, Stock]
 
+from pathlib import Path
+
+from control.excepciones import PersistenceError
+
 
 class FakeBD:
     """Estado en memoria que simula las tablas de la base de datos."""
@@ -50,6 +54,36 @@ class FakeMainDAO:
         self._bd._proximoIdVenta = 1
         self._bd.gastos = {}
         self._bd._proximoIdGasto = 1
+
+    def exportar(self, tipo, rutaDestino) -> str:
+        """Falso: simula la exportación generando un archivo vacío (CU13/CU16).
+
+        Devuelve la ruta con la extensión correcta (.xlsx para historial,
+        .zip para sesión), mismo contrato que el mainDAO real.
+        """
+        extension = ".xlsx" if tipo == "historial" else ".zip"
+        ruta = Path(rutaDestino)
+        if ruta.is_dir():
+            ruta = ruta / f"respaldo_fake{extension}"
+        elif ruta.suffix.lower() != extension:
+            ruta = ruta.with_suffix(extension)
+        ruta.touch()
+        return str(ruta)
+
+    def importar(self, rutaZip, passNueva=None) -> tuple:
+        """Falso: aplica la nueva clave y devuelve la sesión simulada (CU17).
+
+        Eleva PersistenceError si el archivo no existe (contrato con el
+        mainDAO real). Al no manejar archivos reales, no sobrescribe
+        estados: el Agente 3 debe usar el mainDAO real para probar la
+        sobrescritura de la BD.
+        """
+        if not Path(rutaZip).exists():
+            raise PersistenceError("El archivo de sesión no existe.")
+        if passNueva:
+            idSesion, fecha, fondo, caja, _ = self._bd.sesion
+            self._bd.sesion = (idSesion, fecha, fondo, caja, passNueva)
+        return self._bd.sesion
 
 
 class FakeProdDAO:

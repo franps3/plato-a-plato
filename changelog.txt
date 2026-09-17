@@ -1,3 +1,13 @@
+[2026-09-17] Agente 1 (Modelo)
+- Implementados CU13 (Exportar Historial .xlsx), CU16 (Exportar Sesión .zip) y CU17 (Importar Sesión) en acceso/mainDAO.py mediante el método único parametrizado exportar(tipo, rutaDestino) (fiel a docs/spec.md) e importar(rutaZip, passNueva).
+- CU13: exportar("historial", ruta) genera un .xlsx con openpyxl (hojas "Ventas": fecha, producto, cantidad, precio unitario y subtotal; y "Gastos": fecha, nombre, descripción y monto). Si la ruta es una carpeta existente o falta extensión, completa con nombre y extensión por defecto.
+- CU16: exportar("sesion", ruta) hace commit de transacciones pendientes y empaqueta bd.db en un .zip con arcname bd.db. El .zip NO va cifrado (decisión acordada con el usuario).
+- CU17: importar(rutaZip, passNueva) valida el .zip y que el bd.db interno sea SQLite con el esquema del MER y al menos una sesión; respalda la base actual en bd_respaldo.db, sobrescribe bd.db, reabre la conexión compartida y asigna la clave nueva como Pass de la sesión importada. La clave debe llegar HASHEADA por el Agente 3 (misma convención que crearSesion); si no se provee, se conserva la Pass del archivo. Ante fallos eleva PersistenceError y la base activa queda intacta (restaura el respaldo si falla la copia).
+- Regla clave cumplida: sqlite3.Error -> ROLLBACK -> PersistenceError; los errores de archivo (OSError, BadZipFile) también se encapsulan en PersistenceError con logging a plato.log (_manejarErrorArchivo).
+- Ampliado tests/fakeMainDAO.py con exportar/importar (paridad de contrato para que el Agente 3 implemente exportExcel/exportarDb/importarDb en el controlador).
+- Creado tests/test_daos_exportacion.py: 20 tests de integración contra SQLite temporal (no tocan bd.db real): CU13 (xlsx), CU16 (zip), CU17 (import + caso redondo CU16->CU17 y respaldo).
+- CU15 (reiniciar/nuke) ya estaba implementado en un commit previo; queda verificado por la suite.
+- Suite completa: 98/98 tests en verde.
 [2026-09-14] Agente 1 (Modelo) — Fix CU12
 - Corregido el rojo preexistente test_cu12_historialMezclaVentasYGastos en control/servVenta.py.
 - Causa raíz: datetime.now() con resolución de microsegundos podía generar el MISMO timestamp para una venta y un gasto consecutivos; el sort estable de verHistorial los dejaba en orden de inserción (venta antes que gasto).
