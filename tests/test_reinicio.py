@@ -1,7 +1,7 @@
 # Módulo test_reinicio.py
 # Pruebas unitarias del controlador (Agente 3) para:
-#   * haySesion()            (bloqueo Agente 2: pantalla correcta de login)
-#   * vaciarItem(idProducto) (bloqueo Agente 2: quitar producto del carrito)
+#   * haySesion()              (bloqueo Agente 2: pantalla correcta de login)
+#   * quitarProdCompleto(idProducto) (bloqueo Agente 2: quitar producto del carrito)
 #   * CU14 borrarHistorial(password)
 #   * CU15 reiniciar(password)
 #
@@ -79,25 +79,25 @@ def test_haySesion_falseSinSesion():
 
 
 # ---------------------------------------------------------------------------
-# vaciarItem(idProducto) (bloqueo del Agente 2)
+# quitarProdCompleto(idProducto) (bloqueo del Agente 2)
 # ---------------------------------------------------------------------------
 
-def test_vaciarItem_eliminaProductoDelCarrito(controlador):
-    """vaciarItem: quita el producto por completo del carrito."""
+def test_quitarProdCompleto_eliminaProductoDelCarrito(controlador):
+    """quitarProdCompleto: quita el producto por completo del carrito."""
     p = controlador.crearProducto("Hamburguesa", 10, 200)["datos"]
     controlador.agregarProd(p.idProducto)
     controlador.agregarProd(p.idProducto)
     assert controlador.carrito.get(p.idProducto) == 2
 
-    resultado = controlador.vaciarItem(p.idProducto)
+    resultado = controlador.quitarProdCompleto(p.idProducto)
 
     assert resultado["ok"] is True
     assert p.idProducto not in controlador.carrito
 
 
-def test_vaciarItem_sobreProductoAusenteNoRompe(controlador):
-    """vaciarItem: sobre un producto que no está en el carrito es inofensivo."""
-    resultado = controlador.vaciarItem(999)
+def test_quitarProdCompleto_sobreProductoAusenteNoRompe(controlador):
+    """quitarProdCompleto: sobre un producto ausente del carrito es inofensivo."""
+    resultado = controlador.quitarProdCompleto(999)
 
     assert resultado["ok"] is True
 # ---------------------------------------------------------------------------

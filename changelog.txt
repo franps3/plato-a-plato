@@ -1,3 +1,9 @@
+[2026-09-17] Agente 3 (Controlador y Servicios)
+- Implementados CU13 (exportExcel), CU16 (exportarDb) y CU17 (importarDb) en el controlador, sobre mainDAO.exportar/importar del Agente 1.
+- exportExcel(rutaDestino) y exportarDb(rutaDestino) reciben la ruta elegida por la vista con diálogo (decisión acordada).
+- importarDb(rutaZip, passNueva) valida la clave (mín. 4 caracteres), la hashea y la pasa a mainDAO.importar; asigna la sesión importada en el controlador y limpia el carrito.
+- Renombrado vaciarItem(idProd) a quitarProdCompleto(idProd) para desbloquear el botón x del carrito del Agente 2.
+- Tests (tests/test_exportacion.py): 7 casos nuevos. Suite completa: 104/104 en verde.
 [2026-09-17] Agente 1 (Modelo)
 - Implementados CU13 (Exportar Historial .xlsx), CU16 (Exportar Sesión .zip) y CU17 (Importar Sesión) en acceso/mainDAO.py mediante el método único parametrizado exportar(tipo, rutaDestino) (fiel a docs/spec.md) e importar(rutaZip, passNueva).
 - CU13: exportar("historial", ruta) genera un .xlsx con openpyxl (hojas "Ventas": fecha, producto, cantidad, precio unitario y subtotal; y "Gastos": fecha, nombre, descripción y monto). Si la ruta es una carpeta existente o falta extensión, completa con nombre y extensión por defecto.

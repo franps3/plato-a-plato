@@ -606,11 +606,11 @@ class Controlador:
             return {"ok": False, "mensaje": str(err), "datos": None}
 
     # ------------------------------------------------------------------
-    # CU9 (complemento): vaciarItem(idProducto)
+    # CU9 (complemento): quitarProdCompleto(idProducto)
     # Quita un producto POR COMPLETO del carrito sin restar de a uno.
-    # Requerido por el Agente 2 para la vista de venta.
+    # Requerido por el Agente 2 (botón x del carrito).
     # ------------------------------------------------------------------
-    def vaciarItem(self, idProducto) -> dict:
+    def quitarProdCompleto(self, idProducto) -> dict:
         """Elimina un producto del carrito por completo (bloqueo Agente 2).
 
         Retorno: {"ok": bool, "mensaje": str, "datos": int|None}
@@ -658,7 +658,8 @@ class Controlador:
         except AppError as err:
             log.error("%s: %s", type(err).__name__, err, exc_info=True)
             return {"ok": False, "mensaje": str(err), "datos": None}
-# ------------------------------------------------------------------
+
+    # ------------------------------------------------------------------
     # CU15: reiniciar(password)
     # Ingresa la contraseña de confirmación; si es correcta, borra la
     # sesión y la BD local, restaurando la aplicación a cero (nuke).
@@ -687,6 +688,87 @@ class Controlador:
                 "ok": True,
                 "mensaje": "Sistema reiniciado correctamente.",
                 "datos": None,
+            }
+        except AppError as err:
+            log.error("%s: %s", type(err).__name__, err, exc_info=True)
+            return {"ok": False, "mensaje": str(err), "datos": None}
+# ------------------------------------------------------------------
+    # CU13: exportExcel(rutaDestino)
+    # Selecciona directorio de destino (la vista elige con diálogo): genera
+    # y guarda un archivo .xlsx con el historial de la sesión (ventas y
+    # gastos). Delega en mainDAO.exportar("historial", rutaDestino), que
+    # eleva PersistenceError ante fallos.
+    # ------------------------------------------------------------------
+    def exportExcel(self, rutaDestino) -> dict:
+        """Exporta el historial de la sesión a un archivo .xlsx (CU13).
+
+        Retorno: {"ok": bool, "mensaje": str, "datos": str|None}
+        """
+        try:
+            rutaGenerada = self.dao.exportar("historial", rutaDestino)
+            return {
+                "ok": True,
+                "mensaje": "Historial exportado correctamente.",
+                "datos": rutaGenerada,
+            }
+        except AppError as err:
+            log.error("%s: %s", type(err).__name__, err, exc_info=True)
+            return {"ok": False, "mensaje": str(err), "datos": None}
+
+    # ------------------------------------------------------------------
+    # CU16: exportarDb(rutaDestino)
+    # Elige carpeta de destino (la vista la pide con diálogo): empaqueta la
+    # BD y el estado actual en un .zip. Delega en
+    # mainDAO.exportar("sesion", rutaDestino).
+    # ------------------------------------------------------------------
+    def exportarDb(self, rutaDestino) -> dict:
+        """Exporta la sesión (BD local) a un archivo .zip (CU16).
+
+        Retorno: {"ok": bool, "mensaje": str, "datos": str|None}
+        """
+        try:
+            rutaGenerada = self.dao.exportar("sesion", rutaDestino)
+            return {
+                "ok": True,
+                "mensaje": "Sesión exportada correctamente.",
+                "datos": rutaGenerada,
+            }
+        except AppError as err:
+            log.error("%s: %s", type(err).__name__, err, exc_info=True)
+            return {"ok": False, "mensaje": str(err), "datos": None}
+
+    # ------------------------------------------------------------------
+    # CU17: importarDb(rutaZip, passNueva)
+    # Selecciona archivo zip y asigna clave: la valida (mín. 4 caracteres),
+    # la hashea y delega en mainDAO.importar(rutaZip, passHash) para
+    # cargar/sobrescribir la sesión importada. Tras importar, la sesión
+    # queda disponible para iniciar con la clave asignada.
+    # ------------------------------------------------------------------
+    def importarDb(self, rutaZip, passNueva) -> dict:
+        """Importa una sesión desde un archivo .zip y asigna clave (CU17).
+
+        Retorno: {"ok": bool, "mensaje": str, "datos": Sesion|None}
+        """
+        try:
+            self._validarPassword(passNueva)
+            passHash = self.hashearPassword(passNueva)
+            sesionBd = self.dao.importar(rutaZip, passHash)
+            if sesionBd is None:
+                raise SesionNoEncontrada(
+                    "El archivo no contiene una sesión importable."
+                )
+            idSesion, fechaInicio, fondoInicial, caja, _ = sesionBd
+            self.sesionActiva = Sesion(
+                idSesion=idSesion,
+                fechaInicio=fechaInicio,
+                fondoInicial=float(fondoInicial),
+                caja=float(caja),
+            )
+            self.carrito = {}
+            return {
+                "ok": True,
+                "mensaje": "Sesión importada correctamente.",
+                "datos": self.sesionActiva,
             }
         except AppError as err:
             log.error("%s: %s", type(err).__name__, err, exc_info=True)
