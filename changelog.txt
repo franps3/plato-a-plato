@@ -1,3 +1,9 @@
+[2026-09-28] Agente 2 (Vista)
+- Implementada vistas/config.py "Configuración de Productos" (CU4-CU8) según diseño aprobado por el usuario: barra de búsqueda con lupa + botón "+" que abre el popup "Añadir Producto" (CU4), listado de tarjetas (nombre, stock, precio) y en cada una un botón de configuración (engranaje) que abre el popup "Modificar Producto" (CU7) con los botones Eliminar producto / Guardar / Cancelar; el botón de eliminar abre el popup de confirmación "Eliminar Producto" (CU8).
+- Agregado el ícono engranaje en vistas/iconos.py (dibujo vectorial con Pillow) que se genera en vistas/recursos/configuracion.png (idempotente como el resto).
+- Conectada la vista en vistas/menu.py: el botón "Configuración de Productos" de la barra superior ya no cae en "pendiente Agente 3", abre la vista real y resalta el botón activo.
+- Decisiones acordadas con el usuario: un solo popup abierto a la vez; en "Modificar Producto" se persiste primero nombre/precio (editarProducto) y luego stock (editarStock), quedando el popup abierto si el stock es rechazado; la búsqueda filtra localmente; el precio se precarga sin decimales cuando es entero.
+- Verificación: compilación OK, smoke test con DAOs falsos cubriendo alta/modificación/cancelación y eliminación de producto OK, suite completa 78/78 tests en verde (sin regresiones).
 [2026-09-17] Agente 3 (Controlador y Servicios)
 - Implementados CU13 (exportExcel), CU16 (exportarDb) y CU17 (importarDb) en el controlador, sobre mainDAO.exportar/importar del Agente 1.
 - exportExcel(rutaDestino) y exportarDb(rutaDestino) reciben la ruta elegida por la vista con diálogo (decisión acordada).

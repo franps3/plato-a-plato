@@ -8,6 +8,7 @@
 #   * Pantalla inicial: Gestor de Sesión (login). La barra superior sólo se
 #     muestra una vez autenticado.
 #   * Home cierra la sesión (controlador.cerrarSesion) y vuelve al login.
+#   * Configuración de Productos es una vista real (CU4-CU8, vistas/config.py).
 #   * Configuración de Sesión e Historial dependen del Agente 3 (CU13-CU17):
 #     se muestran ACTIVAS pero con un aviso "pendiente Agente 3".
 #
@@ -99,8 +100,7 @@ class Aplicacion(ctk.CTk):
         definiciones = [
             ("venta", "Venta", lambda: self.mostrarVenta()),
             ("configProd", "Configuración de\nProductos",
-             lambda: self.mostrarPendiente(
-                 "configProd", "Configuración de Productos")),
+             lambda: self.mostrarConfigProductos()),
             ("configSesion", "Configuración de\nSesión",
              lambda: self.mostrarPendiente(
                  "configSesion", "Configuración de Sesión")),
@@ -183,6 +183,17 @@ class Aplicacion(ctk.CTk):
         self.vistaActual = VistaVenta(self.contenido, self.controlador)
         self.vistaActual.pack(fill="both", expand=True)
         self._resaltarBoton("venta")
+
+    def mostrarConfigProductos(self):
+        """Muestra la Configuración de Productos (CU4-CU8)."""
+        from .config import VistaConfigProductos
+
+        self._entrarModoApp()
+        self._limpiarContenido()
+        self.nombreVista = "configProd"
+        self.vistaActual = VistaConfigProductos(self.contenido, self.controlador)
+        self.vistaActual.pack(fill="both", expand=True)
+        self._resaltarBoton("configProd")
 
     def mostrarPendiente(self, clave, titulo):
         """Muestra una pantalla de aviso para módulos aún no disponibles."""

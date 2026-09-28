@@ -1,8 +1,8 @@
 # Módulo iconos.py (Agente 2 - Vista)
 # Genera con Pillow los íconos PNG usados por las vistas (casa, lupa, carrito,
-# más, menos y cerrar). Los dibuja de forma vectorial y los guarda en
-# /vistas/recursos para no depender de archivos externos ni de íconos de
-# fuentes del sistema.
+# más, menos, cerrar y configuración). Los dibuja de forma vectorial y los
+# guarda en /vistas/recursos para no depender de archivos externos ni de
+# íconos de fuentes del sistema.
 #
 # Uso:
 #   from vistas.iconos import obtenerIconos
@@ -10,6 +10,7 @@
 #
 # Si los PNG ya existen en /vistas/recursos NO se regeneran (idempotente).
 
+import math
 import os
 
 from PIL import Image, ImageDraw
@@ -180,6 +181,45 @@ def _dibujarCerrar(tamano=20, color=COLOR_GRIS):
     return _finalizar(alto, tamano)
 
 
+def _dibujarConfiguracion(tamano=24, color=COLOR_GRIS):
+    """Dibuja una rueda dentada (engranaje) para configurar un producto."""
+    alto, dibujo, actual = _lienzo(tamano)
+    ancho = actual
+    cx = cy = ancho * 0.5
+    radio = ancho * 0.33           # radio del cuerpo de la rueda
+    radioExterior = ancho * 0.46   # hasta la punta de los dientes
+
+    def _punto(angulo, radioLectura):
+        """Devuelve (x, y) de un punto a 'radio' del centro en 'angulo'."""
+        return (
+            cx + math.cos(angulo) * radioLectura,
+            cy + math.sin(angulo) * radioLectura,
+        )
+
+    # Dientes: 8 triángulos distribuidos alrededor de la circunferencia.
+    dientes = 8
+    for i in range(dientes):
+        ang = 2 * math.pi * i / dientes
+        paso = 2 * math.pi / dientes
+        base1 = _punto(ang - paso * 0.18, radio)
+        base2 = _punto(ang + paso * 0.18, radio)
+        punta = _punto(ang, radioExterior)
+        dibujo.polygon([base1, base2, punta], fill=color)
+
+    # Cuerpo de la rueda (tapa la base de los dientes).
+    dibujo.ellipse(
+        [cx - radio, cy - radio, cx + radio, cy + radio],
+        fill=color,
+    )
+    # Hueco central (recorte transparente).
+    hueco = ancho * 0.13
+    dibujo.ellipse(
+        [cx - hueco, cy - hueco, cx + hueco, cy + hueco],
+        fill=(0, 0, 0, 0),
+    )
+    return _finalizar(alto, tamano)
+
+
 # Definición de íconos: nombre -> (función de dibujo, tamaño, nombre de archivo)
 _ICONOS = {
     "casa": (_dibujarCasa, 48, "casa.png"),
@@ -188,6 +228,7 @@ _ICONOS = {
     "mas": (_dibujarMas, 22, "mas.png"),
     "menos": (_dibujarMenos, 22, "menos.png"),
     "cerrar": (_dibujarCerrar, 20, "cerrar.png"),
+    "configuracion": (_dibujarConfiguracion, 24, "configuracion.png"),
 }
 
 
