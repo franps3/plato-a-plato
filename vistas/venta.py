@@ -4,9 +4,12 @@
 # Renderiza:
 #   * Barra de búsqueda (filtra localmente el listado, sin tocar el controlador).
 #   * Botón de carrito que abre el popup de la venta actual.
+#   * Botón "Gasto" que abre el popup "Registrar Gasto" (CU11).
 #   * Listado de productos (nombre, stock, precio y botón "+" para agregar).
 #   * Popup "Carrito" con los ítems (cantidad, subtotal y botones - + x),
 #     la banda de Total y los botones Confirmar / Cancelar.
+#   * Popup "Registrar Gasto" (CU11) con los campos nombre, descripción y
+#     monto; registra el egreso y descuenta el valor de caja.
 #
 # Regla de rol: cero lógica operativa. Sólo lee entradas, invoca métodos del
 # controlador y refresca componentes según el resultado.
@@ -15,6 +18,8 @@
 #   * El botón "x" elimina la línea completa del carrito (quitarProdCompleto).
 #   * "Cancelar" sólo cierra el popup (deja el carrito intacto).
 #   * La búsqueda filtra localmente la lista ya cargada.
+#   * El botón "Gasto" abre el popup de CU11; un gasto no puede superar la
+#     caja disponible (lo valida el controlador).
 
 import customtkinter as ctk
 from CTkMessagebox import CTkMessagebox
@@ -33,7 +38,7 @@ def _formatoMonto(valor):
 
 
 class VistaVenta(ctk.CTkFrame):
-    """Pantalla de venta: catálogo, búsqueda y carrito (CU5, CU9, CU10)."""
+    """Pantalla de venta: catálogo, búsqueda, carrito y gastos (CU5, CU9, CU10 y CU11)."""
 
     def __init__(self, master, controlador):
         super().__init__(master, fg_color=estilos.FONDO)
@@ -41,6 +46,7 @@ class VistaVenta(ctk.CTkFrame):
         self.productos = []          # lista de Producto vigente
         self.filtro = ""             # texto de búsqueda actual
         self.popupCarrito = None     # CTkToplevel del carrito (si está abierto)
+        self.popupGasto = None       # CTkToplevel "Registrar Gasto" (CU11)
         self._cargarIconos()
         self._construir()
         self.refrescarProductos()
@@ -93,6 +99,15 @@ class VistaVenta(ctk.CTkFrame):
         )
         self.entradaBusqueda.pack(side="left", fill="both", expand=True, padx=(0, 14))
         self.entradaBusqueda.bind("<KeyRelease>", self._alCambiarBusqueda)
+
+        # Botón "Gasto": abre el popup para registrar un egreso (CU11).
+        self.botonGasto = ctk.CTkButton(
+            barraSup, text="Gasto", font=estilos.F_BOLD,
+            width=92, height=44, fg_color=estilos.BOTON_CLARO,
+            hover_color=estilos.BOTON_CLARO_HOVER,
+            corner_radius=estilos.RADIO, command=self._abrirGasto,
+        )
+        self.botonGasto.pack(side="left", padx=(10, 0))
 
         self.botonCarrito = ctk.CTkButton(
             barraSup, text="", image=self.iconos["carrito"],
@@ -368,6 +383,141 @@ class VistaVenta(ctk.CTkFrame):
         if self.popupCarrito is not None and self.popupCarrito.winfo_exists():
             self.popupCarrito.destroy()
         self.popupCarrito = None
+
+    # ------------------------------------------------------------------
+    # Popup Registrar Gasto (CU11)
+    # ------------------------------------------------------------------
+    def _abrirGasto(self):
+        """Abre el popup para registrar un gasto secundario (CU11)."""
+        if self.popupGasto is not None and self.popupGasto.winfo_exists():
+            self.popupGasto.lift()
+            return
+
+        self.popupGasto = ctk.CTkToplevel(self)
+        self.popupGasto.title("Registrar Gasto")
+        self.popupGasto.configure(fg_color=estilos.FONDO)
+        self.popupGasto.geometry("460x430")
+        self.popupGasto.resizable(False, False)
+        self.popupGasto.transient(self.winfo_toplevel())
+
+        # Encabezado.
+        encabezado = ctk.CTkFrame(
+            self.popupGasto, fg_color=estilos.FONDO_PANEL,
+            corner_radius=estilos.RADIO,
+        )
+        encabezado.pack(fill="x", padx=16, pady=(16, 8))
+        ctk.CTkLabel(
+            encabezado, text="Registrar Gasto", font=estilos.F_TITULO,
+            text_color=estilos.TEXTO_CLARO,
+        ).pack(pady=10)
+
+        # Formulario: nombre, descripción y monto.
+        formulario = ctk.CTkFrame(
+            self.popupGasto, fg_color=estilos.FONDO_PANEL,
+            corner_radius=estilos.RADIO,
+        )
+        formulario.pack(fill="x", padx=16, pady=8)
+
+        ctk.CTkLabel(
+            formulario, text="Nombre", font=estilos.F_BOLD,
+            text_color=estilos.TEXTO_CLARO, anchor="w",
+        ).pack(fill="x", padx=20)
+        self.gastoNombre = ctk.CTkEntry(
+            formulario, font=estilos.F_NORMAL, height=40,
+            fg_color=estilos.ENTRADA, text_color=estilos.ENTRADA_TEXTO,
+            corner_radius=estilos.RADIO,
+            placeholder_text="Ej.: Compra de insumos",
+        )
+        self.gastoNombre.pack(fill="x", padx=20, pady=(4, 10))
+        self.gastoNombre.bind("<Return>", lambda _e: self._registrarGasto())
+
+        ctk.CTkLabel(
+            formulario, text="Descripción", font=estilos.F_BOLD,
+            text_color=estilos.TEXTO_CLARO, anchor="w",
+        ).pack(fill="x", padx=20)
+        self.gastoDesc = ctk.CTkEntry(
+            formulario, font=estilos.F_NORMAL, height=40,
+            fg_color=estilos.ENTRADA, text_color=estilos.ENTRADA_TEXTO,
+            corner_radius=estilos.RADIO,
+            placeholder_text="Ej.: Platos y vasos",
+        )
+        self.gastoDesc.pack(fill="x", padx=20, pady=(4, 10))
+        self.gastoDesc.bind("<Return>", lambda _e: self._registrarGasto())
+
+        ctk.CTkLabel(
+            formulario, text="Monto", font=estilos.F_BOLD,
+            text_color=estilos.TEXTO_CLARO, anchor="w",
+        ).pack(fill="x", padx=20)
+        self.gastoMonto = ctk.CTkEntry(
+            formulario, font=estilos.F_NORMAL, height=40,
+            fg_color=estilos.ENTRADA, text_color=estilos.ENTRADA_TEXTO,
+            corner_radius=estilos.RADIO, placeholder_text="Ej.: 2.500",
+        )
+        self.gastoMonto.pack(fill="x", padx=20, pady=(4, 0))
+        self.gastoMonto.bind("<Return>", lambda _e: self._registrarGasto())
+
+        # Botones Registrar / Cancelar.
+        acciones = ctk.CTkFrame(self.popupGasto, fg_color="transparent")
+        acciones.pack(fill="x", padx=16, pady=(0, 16))
+        ctk.CTkButton(
+            acciones, text="Registrar", font=estilos.F_BOLD, height=44,
+            fg_color=estilos.BOTON_BARRA, hover_color=estilos.BOTON_BARRA_HOVER,
+            command=self._registrarGasto,
+        ).pack(side="left", expand=True, fill="x", padx=(0, 8))
+        ctk.CTkButton(
+            acciones, text="Cancelar", font=estilos.F_BOLD, height=44,
+            fg_color=estilos.BOTON_BARRA, hover_color=estilos.BOTON_BARRA_HOVER,
+            command=self._cerrarGasto,
+        ).pack(side="left", expand=True, fill="x", padx=(8, 0))
+
+        self.gastoNombre.focus_set()
+
+    def _registrarGasto(self):
+        """Registra el gasto (CU11) y cierra el popup si se persiste.
+
+        Ante un error (monto inválido o saldo insuficiente) se avisa y el
+        popup queda abierto para corregir los datos.
+        """
+        nombre = self.gastoNombre.get()
+        descripcion = self.gastoDesc.get()
+        monto = self._parsearMonto(self.gastoMonto.get())
+        if not nombre.strip():
+            self._alerta("El nombre no puede ser vacío.")
+            return
+        if monto is None:
+            self._alerta("El monto debe ser un número válido.")
+            return
+
+        resultado = self.controlador.gasto(nombre, descripcion, monto)
+        if resultado["ok"]:
+            self._cerrarGasto()
+            self._informar(resultado["mensaje"])
+        else:
+            self._alerta(resultado["mensaje"])
+
+    def _cerrarGasto(self):
+        """Cierra el popup de gasto dejando la caja y el carrito intactos."""
+        if self.popupGasto is not None and self.popupGasto.winfo_exists():
+            self.popupGasto.destroy()
+        self.popupGasto = None
+
+    # ------------------------------------------------------------------
+    # Conversión de entradas (mismas convenciones que config.py y login.py)
+    # ------------------------------------------------------------------
+    @staticmethod
+    def _parsearMonto(texto):
+        """Convierte el texto a float; None si no es un número válido.
+
+        Acepta separador de miles '.' y decimal ',' (ej.: '2.500' -> 2500,
+        '12,50' -> 12.5). Misma convención que el fondo inicial del login.
+        """
+        texto = (texto or "").strip()
+        if texto == "":
+            return None
+        try:
+            return float(texto.replace(".", "").replace(",", "."))
+        except ValueError:
+            return None
 
     # ------------------------------------------------------------------
     # Diálogos
