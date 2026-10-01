@@ -1,4 +1,4 @@
-# Módulo login.py (Agente 2 - Vista) - PROVISIONAL
+# Módulo login.py (Vista)
 # Pantalla del Gestor de Sesión del sistema "Plato a Plato".
 #
 # Atiende:
@@ -6,10 +6,9 @@
 #   * CU2 Iniciar sesión: ingresa la credencial y desbloquea la interfaz.
 #   * CU3 Cerrar sesión: se dispara desde el botón Home del shell (menu.py).
 #
-# DECISIÓN ACORDADA: el controlador aún no expone un método para saber si ya
-# existe una sesión registrada. Mientras el Agente 3 agregue haySesion(), se
-# muestran AMBAS opciones y el usuario elige: "Ingresar" o "Crear sesión".
-# Cuando exista haySesion(), esta vista mostrará la pantalla correcta.
+# Según haySesion() (Agente 3) se muestra la pantalla correcta:
+#   * Si ya existe una sesión registrada -> sólo se puede INGRESAR.
+#   * Si no existe -> sólo se puede CREAR.
 #
 # Regla de rol: cero lógica operativa. Sólo leer entradas, invocar métodos del
 # controlador y refrescar según el resultado.
@@ -30,7 +29,14 @@ class VistaLogin(ctk.CTkFrame):
         self.controlador = controlador
         # Callback que invoca el shell cuando la sesión queda activa.
         self.alAutenticar = alAutenticar
-        self.modo = "ingresar"  # "ingresar" o "crear"
+        # Pantalla correcta según exista o no una sesión registrada.
+        resultado = controlador.haySesion()
+        if resultado["ok"] and resultado["datos"]:
+            self.existeSesion = True
+            self.modo = "ingresar"
+        else:
+            self.existeSesion = False
+            self.modo = "crear"
         self._construir()
 
     # ------------------------------------------------------------------
@@ -53,17 +59,18 @@ class VistaLogin(ctk.CTkFrame):
             text_color=estilos.TEXTO_TENUE,
         ).pack(padx=40, pady=(0, 18))
 
-        # Selector de modo: Ingresar / Crear sesión.
+        # Selector de modo: según exista sesión se muestra la pantalla correcta.
+        valores = ["Crear sesión"] if not self.existeSesion else ["Ingresar"]
         self.selector = ctk.CTkSegmentedButton(
-            tarjeta, values=["Ingresar", "Crear sesión"],
-            font=estilos.F_NORMAL, command=self._cambiarModo,
+            tarjeta, values=valores,
+            font=estilos.F_NORMAL,
             fg_color=estilos.FONDO,
             selected_color=estilos.BOTON_BARRA_ACTIVO,
             selected_hover_color=estilos.BOTON_BARRA_HOVER,
             unselected_color=estilos.BOTON_BARRA,
             unselected_hover_color=estilos.BOTON_BARRA_HOVER,
         )
-        self.selector.set("Ingresar")
+        self.selector.set(valores[0])
         self.selector.pack(padx=40, pady=(0, 18), fill="x")
 
         # Campo de contraseña.
@@ -92,8 +99,9 @@ class VistaLogin(ctk.CTkFrame):
         self.entradaFondo.pack(pady=(4, 0), fill="x")
 
         # Botón principal de acción.
+        textoBoton = "Crear sesión" if self.modo == "crear" else "Ingresar"
         self.botonAccion = ctk.CTkButton(
-            tarjeta, text="Ingresar", font=estilos.F_BOLD, height=44,
+            tarjeta, text=textoBoton, font=estilos.F_BOLD, height=44,
             fg_color=estilos.BOTON_BARRA_ACTIVO,
             hover_color=estilos.BOTON_BARRA_HOVER,
             corner_radius=estilos.RADIO, command=self._accion,
@@ -104,21 +112,11 @@ class VistaLogin(ctk.CTkFrame):
         self.entradaPass.bind("<Return>", lambda _e: self._accion())
         self.entradaFondo.bind("<Return>", lambda _e: self._accion())
 
-    # ------------------------------------------------------------------
-    # Cambio de modo
-    # ------------------------------------------------------------------
-    def _cambiarModo(self, valor):
-        """Alterna entre ingresar y crear sesión, mostrando u ocultando fondo."""
-        if valor == "Crear sesión":
-            self.modo = "crear"
+        # El campo de fondo inicial sólo aplica al crear sesión.
+        if self.modo == "crear":
             self.marcoFondo.pack(
                 padx=40, pady=(0, 10), fill="x", before=self.botonAccion
             )
-            self.botonAccion.configure(text="Crear sesión")
-        else:
-            self.modo = "ingresar"
-            self.marcoFondo.pack_forget()
-            self.botonAccion.configure(text="Ingresar")
 
     # ------------------------------------------------------------------
     # Acción principal (CU1 / CU2)

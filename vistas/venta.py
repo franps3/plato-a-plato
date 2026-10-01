@@ -12,8 +12,7 @@
 # controlador y refresca componentes según el resultado.
 #
 # Notas de decisiones acordadas con el usuario:
-#   * El botón "x" (eliminar la línea completa) queda DESHABILITADO hasta que
-#     el Agente 3 implemente quitarProdCompleto().
+#   * El botón "x" elimina la línea completa del carrito (quitarProdCompleto).
 #   * "Cancelar" sólo cierra el popup (deja el carrito intacto).
 #   * La búsqueda filtra localmente la lista ya cargada.
 
@@ -225,15 +224,6 @@ class VistaVenta(ctk.CTkFrame):
         )
         self.itemsCarrito.pack(fill="both", expand=True, padx=16, pady=8)
 
-        # Aviso de función pendiente (botón x deshabilitado).
-        ctk.CTkLabel(
-            self.popupCarrito,
-            text="El botón x (eliminar línea) se habilitará cuando el Agente 3 "
-                 "implemente quitarProdCompleto().",
-            font=estilos.F_PEQUENA, text_color=estilos.TEXTO_TENUE,
-            wraplength=520, justify="center",
-        ).pack(padx=16, pady=(0, 4))
-
         # Banda de Total.
         bandaTotal = ctk.CTkFrame(
             self.popupCarrito, fg_color=estilos.FONDO_PANEL,
@@ -309,11 +299,12 @@ class VistaVenta(ctk.CTkFrame):
             corner_radius=estilos.RADIO_PILL, width=92,
         ).pack(side="left", padx=6)
 
-        # Botón "x": DESHABILITADO (pendiente del Agente 3).
+        # Botón "x": elimina la línea completa del carrito.
         ctk.CTkButton(
             fila, text="", image=self.iconos["cerrar"], width=32, height=32,
             fg_color=estilos.BOTON_CLARO, hover_color=estilos.BOTON_CLARO_HOVER,
-            corner_radius=8, state="disabled",
+            corner_radius=8,
+            command=lambda p=producto: self._carritoEliminar(p),
         ).pack(side="left", padx=(4, 10))
 
         # Botón "+": suma una unidad.
@@ -345,6 +336,15 @@ class VistaVenta(ctk.CTkFrame):
     def _carritoQuitar(self, producto):
         """Resta una unidad desde el popup (CU9); cierra si queda vacío."""
         self.controlador.quitarProd(producto.idProducto)
+        if not self.controlador.carrito:
+            self._cerrarCarrito()
+            return
+        self._refrescarCarrito()
+
+    def _carritoEliminar(self, producto):
+        """Elimina la línea completa del carrito (bloqueo resuelto del
+        Agente 2) y cierra el popup si el carrito queda vacío."""
+        self.controlador.quitarProdCompleto(producto.idProducto)
         if not self.controlador.carrito:
             self._cerrarCarrito()
             return

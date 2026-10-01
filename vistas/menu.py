@@ -9,8 +9,9 @@
 #     muestra una vez autenticado.
 #   * Home cierra la sesión (controlador.cerrarSesion) y vuelve al login.
 #   * Configuración de Productos es una vista real (CU4-CU8, vistas/config.py).
-#   * Configuración de Sesión e Historial dependen del Agente 3 (CU13-CU17):
-#     se muestran ACTIVAS pero con un aviso "pendiente Agente 3".
+#   * Configuración de Sesión es una vista real (CU13, CU15-CU17,
+#     vistas/configSesion.py).
+#   * Historial es una vista real (CU12, CU14, vistas/historial.py).
 #
 # Regla de rol: cero lógica operativa. Sólo orquesta pantallas y delega en
 # las vistas y el controlador.
@@ -24,26 +25,6 @@ from .iconos import obtenerIconos
 # Ancho/alto de la ventana raíz.
 ANCHO_VENTANA = 1080
 ALTO_VENTANA = 620
-
-
-class VistaPendiente(ctk.CTkFrame):
-    """Pantalla informativa para módulos aún no disponibles."""
-
-    def __init__(self, master, titulo, detalle):
-        super().__init__(master, fg_color=estilos.FONDO)
-        contenedor = ctk.CTkFrame(
-            self, fg_color=estilos.FONDO_PANEL,
-            corner_radius=estilos.RADIO,
-        )
-        contenedor.place(relx=0.5, rely=0.5, anchor="center")
-        ctk.CTkLabel(
-            contenedor, text=titulo, font=estilos.F_TITULO,
-            text_color=estilos.TEXTO_CLARO,
-        ).pack(padx=48, pady=(28, 8))
-        ctk.CTkLabel(
-            contenedor, text=detalle, font=estilos.F_NORMAL,
-            text_color=estilos.TEXTO_TENUE, wraplength=520, justify="center",
-        ).pack(padx=48, pady=(0, 28))
 
 
 class Aplicacion(ctk.CTk):
@@ -102,11 +83,8 @@ class Aplicacion(ctk.CTk):
             ("configProd", "Configuración de\nProductos",
              lambda: self.mostrarConfigProductos()),
             ("configSesion", "Configuración de\nSesión",
-             lambda: self.mostrarPendiente(
-                 "configSesion", "Configuración de Sesión")),
-            ("historial", "Historial",
-             lambda: self.mostrarPendiente(
-                 "historial", "Historial")),
+             lambda: self.mostrarConfigSesion()),
+            ("historial", "Historial", lambda: self.mostrarHistorial()),
         ]
         for clave, etiqueta, accion in definiciones:
             boton = ctk.CTkButton(
@@ -195,19 +173,29 @@ class Aplicacion(ctk.CTk):
         self.vistaActual.pack(fill="both", expand=True)
         self._resaltarBoton("configProd")
 
-    def mostrarPendiente(self, clave, titulo):
-        """Muestra una pantalla de aviso para módulos aún no disponibles."""
-        detalle = (
-            "Esta sección estará disponible cuando el Agente 3 implemente "
-            "los casos de uso CU13-CU17 (exportar, importar, reiniciar, "
-            "borrar historial y ver historial)."
-        )
+    def mostrarConfigSesion(self):
+        """Muestra la Configuración de Sesión (CU13, CU15-CU17)."""
+        from .configSesion import VistaConfigSesion
+
         self._entrarModoApp()
         self._limpiarContenido()
-        self.nombreVista = clave
-        self.vistaActual = VistaPendiente(self.contenido, titulo, detalle)
+        self.nombreVista = "configSesion"
+        self.vistaActual = VistaConfigSesion(
+            self.contenido, self.controlador, alVolverLogin=self.mostrarLogin
+        )
         self.vistaActual.pack(fill="both", expand=True)
-        self._resaltarBoton(clave)
+        self._resaltarBoton("configSesion")
+
+    def mostrarHistorial(self):
+        """Muestra el Historial (CU12, CU14)."""
+        from .historial import VistaHistorial
+
+        self._entrarModoApp()
+        self._limpiarContenido()
+        self.nombreVista = "historial"
+        self.vistaActual = VistaHistorial(self.contenido, self.controlador)
+        self.vistaActual.pack(fill="both", expand=True)
+        self._resaltarBoton("historial")
 
     # ------------------------------------------------------------------
     # Home

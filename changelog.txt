@@ -1,4 +1,11 @@
-[2026-09-28] Agente 2 (Vista)
+[2026-10-01] Agente 3 (Vistas - cierre CU12-CU17)
+- Creada vistas/configSesion.py "Configuración de Sesión" (CU13 Exportar Historial .xlsx, CU15 Reiniciar Sistema, CU16 Exportar Sesión .zip, CU17 Importar Sesión). Cada acción elige la ruta con filedialog y delega en el controlador; exportExcel/exportarDb reciben la ruta elegida por la vista (decisión acordada). Reiniciar e Importar vuelven al login mediante el callback alVolverLogin.
+- Creada vistas/historial.py "Historial" (CU12 Ver Historial y CU14 Descartar Historial): renderiza una tarjeta por movimiento (venta/gasto/reinserción) con fecha, descripción y monto, y descartar pide contraseña antes de llamar a borrarHistorial.
+- Creada vistas/dialogos.py con PopupPassword (CTkToplevel modal) compartido por CU14, CU15 y CU17; sigue la paleta de estilos.py y el patrón de popups de venta.py.
+- Conectadas las vistas reales en vistas/menu.py (mostrarConfigSesion/mostrarHistorial) y eliminadas la clase VistaPendiente y el método mostrarPendiente, ya sin uso.
+- vistas/login.py ahora consulta controlador.haySesion() y muestra la pantalla correcta: "Ingresar" si ya existe sesión, "Crear sesión" si no existe.
+- vistas/venta.py: habilitado el botón "x" del carrito, que elimina la línea completa vía controlador.quitarProdCompleto(idProducto) y cierra el popup si el carrito queda vacío.
+- Verificación: compilación OK de las seis vistas y suite completa 104/104 en verde (sin regresiones).
 - Implementada vistas/config.py "Configuración de Productos" (CU4-CU8) según diseño aprobado por el usuario: barra de búsqueda con lupa + botón "+" que abre el popup "Añadir Producto" (CU4), listado de tarjetas (nombre, stock, precio) y en cada una un botón de configuración (engranaje) que abre el popup "Modificar Producto" (CU7) con los botones Eliminar producto / Guardar / Cancelar; el botón de eliminar abre el popup de confirmación "Eliminar Producto" (CU8).
 - Agregado el ícono engranaje en vistas/iconos.py (dibujo vectorial con Pillow) que se genera en vistas/recursos/configuracion.png (idempotente como el resto).
 - Conectada la vista en vistas/menu.py: el botón "Configuración de Productos" de la barra superior ya no cae en "pendiente Agente 3", abre la vista real y resalta el botón activo.
