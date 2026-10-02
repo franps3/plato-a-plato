@@ -3,6 +3,7 @@ venv/
 
 # Artefactos de ejecución de la app
 bd.db
+bd_respaldo.db
 plato.log
 
 # Cachés de Python

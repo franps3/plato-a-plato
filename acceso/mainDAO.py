@@ -27,6 +27,7 @@
 import logging
 import shutil
 import sqlite3
+import sys
 import tempfile
 import zipfile
 from datetime import datetime
@@ -36,15 +37,27 @@ from openpyxl import Workbook
 
 from control.excepciones import PersistenceError
 
-# Configuración de logging central (plato.log).
+# Carpeta base de los datos de la aplicación (bd.db, plato.log y
+# bd_respaldo.db): junto al ejecutable cuando la app está congelada con
+# PyInstaller (ejecutable portable: los datos viajan con el .exe) y en la
+# raíz del proyecto cuando se ejecuta desde el código fuente.
+if getattr(sys, "frozen", False):
+    CARPETA_BASE = Path(sys.executable).resolve().parent
+else:
+    CARPETA_BASE = Path(__file__).resolve().parent.parent
+
+# Configuración de logging central (plato.log, dentro de CARPETA_BASE).
 # Se usa un FileHandler explícito para que plato.log se cree bajo cualquier
 # entorno (incluido pytest, que instala sus propios handlers en el root).
+# delay=True: el archivo se abre recién ante el primer ERROR, así una
+# carpeta sin permiso de escritura no impide que la app arranque.
 log = logging.getLogger("mainDAO")
 _manejador = logging.FileHandler(
-    filename="plato.log",
+    filename=str(CARPETA_BASE / "plato.log"),
     mode="a",
     encoding="utf-8",
     errors="replace",
+    delay=True,
 )
 _manejador.setLevel(logging.ERROR)
 _manejador.setFormatter(
@@ -53,8 +66,8 @@ _manejador.setFormatter(
 log.addHandler(_manejador)
 log.setLevel(logging.ERROR)
 
-# Ruta absoluta de la base de datos local (raíz del proyecto).
-RUTA_BD = Path(__file__).resolve().parent.parent / "bd.db"
+# Ruta absoluta de la base de datos local (dentro de CARPETA_BASE).
+RUTA_BD = CARPETA_BASE / "bd.db"
 
 
 class mainDAO:

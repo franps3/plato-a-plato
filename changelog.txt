@@ -1,3 +1,10 @@
+[2026-10-01] Agente 2 (Build - ejecutable portable)
+- Agregado compilar.py: empaqueta la app con PyInstaller (--onefile --windowed, nombre PlatoAPlato), incluye los PNG de vistas/recursos, los datos de customtkinter y CTkMessagebox (--collect-all) y el icono del ejecutable generado al vuelo desde vistas/recursos/casa.png (si el icono falla, compila igual sin el). Acepta --onedir para la variante en carpeta.
+- acceso/mainDAO.py: bd.db, plato.log y bd_respaldo.db pasan a resolverse sobre CARPETA_BASE, que es la carpeta del .exe cuando la app corre congelada (getattr(sys, "frozen", False)) y la raiz del proyecto en desarrollo. Sin esto, en un build --onefile los datos se creaban dentro de la carpeta temporal de PyInstaller (_MEIPASS) y se perdian al cerrar la app; ahora viajan con el ejecutable portable.
+- El FileHandler de plato.log se crea con delay=True para que una carpeta sin permiso de escritura no impida el arranque.
+- vistas/estilos.py: BOTON_CLARO pasa de #E9E9EF a #8F8F8F (correccion pedida por el usuario: el texto por defecto de los CTkButton quedaba de un color casi identico al fondo claro del boton y no se leia). Sin cambios de layout ni de tamanos.
+- .gitignore: se ignora bd_respaldo.db, el respaldo que genera CU17 al importar una sesion (mismo tratamiento que bd.db y plato.log).
+- Verificacion: suite completa 104/104 en verde tras el cambio de rutas y arranque del ejecutable generado (crea bd.db junto al .exe).
 [2026-10-01] Agente 2 (Vista Venta - CU11)
 - vistas/venta.py: agregado el botón "Gasto" en la barra superior de la pestaña Venta (a la izquierda del carrito), que abre el popup "Registrar Gasto" (CU11) con los campos Nombre, Descripción y Monto y los botones Registrar / Cancelar; antes no había ninguna forma de registrar un egreso (gasto secundario) desde la interfaz.
 - El popup delega en controlador.gasto(nombre, desc, monto): si el registro falla (monto inválido o saldo insuficiente en caja) se avisa con CTkMessagebox y el popup queda abierto para corregir el dato; si el alta sale bien, el popup se cierra y se informa el mensaje del controlador.
