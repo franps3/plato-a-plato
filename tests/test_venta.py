@@ -258,3 +258,82 @@ def test_cu12_historialVacio(controlador):
 
     assert resultado["ok"] is True
     assert resultado["datos"] == []
+
+# ---------------------------------------------------------------------------
+# COR2: verProductosVenta() (descuento de stock en vivo, reserva visual)
+# ---------------------------------------------------------------------------
+
+def test_cor2_descuentaReservaDelCarrito(controlador, catalogo):
+    """COR2: verProductosVenta resta del stock lo reservado en el carrito."""
+    idA = catalogo["A"]  # stock 5
+
+    controlador.agregarProd(idA)
+    controlador.agregarProd(idA)
+
+    disponibles = {
+        p.idProducto: p.stock
+        for p in controlador.verProductosVenta()["datos"]
+    }
+    # Stock real 5 - 2 en el carrito = 3 disponibles.
+    assert disponibles[idA] == 3
+
+
+def test_cor2_verProductosMantieneStockReal(controlador, catalogo):
+    """COR2: verProductos (Config) sigue mostrando el stock real de la bd."""
+    idA = catalogo["A"]  # stock 5
+
+    controlador.agregarProd(idA)
+
+    stocks = {
+        p.idProducto: p.stock
+        for p in controlador.verProductos()["datos"]
+    }
+    assert stocks[idA] == 5  # la reserva del carrito no lo afecta.
+
+
+def test_cor2_quitarProdDevuelveReserva(controlador, catalogo):
+    """COR2: al quitar del carrito vuelve a subir el disponible en venta."""
+    idA = catalogo["A"]  # stock 5
+
+    controlador.agregarProd(idA)
+    controlador.agregarProd(idA)
+    controlador.quitarProd(idA)  # queda 1 unidad en el carrito.
+
+    disponibles = {
+        p.idProducto: p.stock
+        for p in controlador.verProductosVenta()["datos"]
+    }
+    assert disponibles[idA] == 4
+
+
+def test_cor2_disponibleNuncaNegativo(controlador, catalogo):
+    """COR2: si la reserva superara el stock, el disponible queda en 0."""
+    idC = catalogo["C"]  # stock 10
+    # Simula una reserva mayor al stock real (estado interno del carrito).
+    controlador.carrito[idC] = 12
+
+    disponibles = {
+        p.idProducto: p.stock
+        for p in controlador.verProductosVenta()["datos"]
+    }
+    assert disponibles[idC] == 0
+
+
+def test_cor2_confirmarVentaDescuentaReal(controlador, catalogo):
+    """COR2: tras confirmar, el stock real baja y el carrito se vacía."""
+    idA = catalogo["A"]  # stock 5
+
+    controlador.agregarProd(idA)
+    controlador.agregarProd(idA)
+    resultado = controlador.confirmarVenta()
+
+    assert resultado["ok"] is True
+    # El stock real en la bd bajó de 5 a 3.
+    assert controlador.servStock.verStock(idA) == 3
+    assert controlador.carrito == {}
+    # Y el disponible vuelve a coincidir con el real.
+    disponibles = {
+        p.idProducto: p.stock
+        for p in controlador.verProductosVenta()["datos"]
+    }
+    assert disponibles[idA] == 3

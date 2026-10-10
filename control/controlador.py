@@ -277,6 +277,39 @@ class Controlador:
             return {"ok": False, "mensaje": str(err), "datos": None}
 
     # ------------------------------------------------------------------
+    # COR2: verProductosVenta()
+    # Igual que verProductos(), pero el stock devuelto es el DISPONIBLE para
+    # la pantalla de Venta: se le resta la cantidad reservada en el carrito
+    # (reserva VISUAL, sin tocar la base). El descuento real del stock ocurre
+    # recién en confirmarVenta (CU10). La pantalla de Configuración debe
+    # seguir usando verProductos() (stock real de la bd).
+    # ------------------------------------------------------------------
+    def verProductosVenta(self) -> dict:
+        """Lista los productos con su stock DISPONIBLE para vender (COR2).
+
+        Calcula el disponible como max(0, stock real - cantidad en carrito)
+        de cada producto. Es una reserva visual para el descuento en vivo de
+        la pantalla de Venta; NO escribe en la base (el stock real sólo se
+        descuenta al confirmar la venta, CU10).
+
+        Retorno: {"ok": bool, "mensaje": str, "datos": [Producto, ...]}
+        """
+        try:
+            productos = self.servProd.verProductos(self.sesionActiva.idSesion)
+            for producto in productos:
+                stockReal = self.servStock.verStock(producto.idProducto)
+                reservado = self.carrito.get(producto.idProducto, 0)
+                producto.stock = max(0, stockReal - reservado)
+            return {
+                "ok": True,
+                "mensaje": "Catálogo actualizado.",
+                "datos": productos,
+            }
+        except AppError as err:
+            log.error("%s: %s", type(err).__name__, err, exc_info=True)
+            return {"ok": False, "mensaje": str(err), "datos": None}
+
+    # ------------------------------------------------------------------
     # CU6: seleccionarProducto(idProducto)
     # Tarea exclusivamente visual (Agente 2): el clic en un ítem de la
     # lista habilita el menú editar/borrar. No requiere lógica acá.
