@@ -107,7 +107,7 @@ def test_cu13_generaXlsxConVentasYGastos(bdTemporal, conMovimientos,
     assert ruta.endswith(".xlsx") and Path(ruta).exists()
 
     libro = load_workbook(ruta)
-    assert set(libro.sheetnames) == {"Ventas", "Gastos"}
+    assert set(libro.sheetnames) == {"Ventas", "Gastos", "Cajas"}
     filasVentas = list(libro["Ventas"].iter_rows(values_only=True))
     assert filasVentas[0] == ("Fecha y hora", "Producto", "Cantidad",
                               "Precio unitario", "Subtotal")
@@ -122,6 +122,15 @@ def test_cu13_generaXlsxConVentasYGastos(bdTemporal, conMovimientos,
                               "Monto")
     assert filasGastos[1] == ("2026-09-13 12:00:00.000001", "Insumos",
                               "Carteles", -100.0)
+
+    # COR3: la hoja "Cajas" reporta valor inicial, valor actual y caja total.
+    filasCajas = list(libro["Cajas"].iter_rows(values_only=True))
+    assert filasCajas[0] == ("Caja", "Valor inicial", "Valor actual",
+                             "Caja total")
+    # Caja principal: fondo inicial 500, valor actual final 2700
+    # (500 + 2300 de la venta - 100 del gasto).
+    assert ("Caja principal", 500.0, 2700.0, None) in filasCajas[1:]
+    assert ("Caja total", None, None, 2700.0) in filasCajas[1:]
 
 
 def test_cu13_xlsxConHistorialVacioSoloHeaders(bdTemporal, sesionId,

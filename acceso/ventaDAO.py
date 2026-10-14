@@ -64,6 +64,13 @@ class ventaDAO:
                 "UPDATE Sesion SET Caja = ? WHERE ID_sesion = ?",
                 (cajaNueva, idSesion),
             )
+            # COR3 / preparación MJ1 (N cajas): la venta modifica el monto
+            # actual de la caja principal (Monto) en la misma transacción.
+            mainDAO.cursor.execute(
+                "UPDATE Caja SET Monto = ? WHERE ID_sesion = ? "
+                "AND Nombre = 'Caja principal'",
+                (cajaNueva, idSesion),
+            )
             mainDAO.conn.commit()
             return idVenta
         except sqlite3.Error as err:
@@ -90,6 +97,13 @@ class ventaDAO:
             idGasto = mainDAO.cursor.lastrowid
             mainDAO.cursor.execute(
                 "UPDATE Sesion SET Caja = ? WHERE ID_sesion = ?",
+                (cajaNueva, idSesion),
+            )
+            # COR3 / preparación MJ1 (N cajas): el gasto/reinserción modifica
+            # el monto actual de la caja principal (Monto) en la misma transacción.
+            mainDAO.cursor.execute(
+                "UPDATE Caja SET Monto = ? WHERE ID_sesion = ? "
+                "AND Nombre = 'Caja principal'",
                 (cajaNueva, idSesion),
             )
             mainDAO.conn.commit()

@@ -11,8 +11,9 @@
 #       Devuelve (ID_sesion, Fecha_inicio, Fondo_inicial, Caja, Pass)
 #       de la sesión registrada, o None si no existe.
 #   * exportar(tipo, rutaDestino) -> str
-#       tipo "historial" (CU13) genera un .xlsx con las hojas Ventas y
-#       Gastos; tipo "sesion" (CU16) empaqueta bd.db en un .zip.
+#       tipo "historial" (CU13) genera un .xlsx con las hojas Ventas,
+#       Gastos y Cajas (COR3: valor inicial/actual por caja y caja total);
+#       tipo "sesion" (CU16) empaqueta bd.db en un .zip.
 #       Devuelve la ruta del archivo generado.
 #   * importar(rutaZip, passNueva) -> tuple | None
 #       Sobrescribe la BD local con la del .zip (CU17). passNueva debe
@@ -128,6 +129,15 @@ class mainDAO:
         FOREIGN KEY (ID_sesion) REFERENCES Sesion(ID_sesion) ON DELETE CASCADE
     );
 
+    CREATE TABLE IF NOT EXISTS Caja (
+        ID_caja INTEGER PRIMARY KEY AUTOINCREMENT,
+        ID_sesion INTEGER NOT NULL,
+        Nombre TEXT NOT NULL,
+        Fondo_inicial REAL NOT NULL,
+        Monto REAL NOT NULL,
+        FOREIGN KEY (ID_sesion) REFERENCES Sesion(ID_sesion) ON DELETE CASCADE
+    );
+
     CREATE INDEX IF NOT EXISTS idx_producto_sesion ON Producto(ID_sesion);
     CREATE INDEX IF NOT EXISTS idx_venta_sesion ON Venta(ID_sesion);
     CREATE INDEX IF NOT EXISTS idx_detalle_venta ON DetalleVenta(ID_venta);
@@ -151,6 +161,16 @@ class mainDAO:
             mainDAO.cursor.execute("PRAGMA foreign_keys = ON")
             # Crea el esquema completo de forma idempotente.
             mainDAO.cursor.executescript(mainDAO._ESQUEMA)
+            # COR3 / migración MJ1: toda sesión preexistente (creada antes
+            # de la tabla Caja) se siembra con su "Caja principal", usando
+            # su fondo inicial y caja actual. Idempotente (NOT EXISTS).
+            mainDAO.cursor.execute(
+                "INSERT INTO Caja (ID_sesion, Nombre, Fondo_inicial, Monto) "
+                "SELECT ID_sesion, 'Caja principal', Fondo_inicial, Caja "
+                "FROM Sesion WHERE NOT EXISTS ("
+                "    SELECT 1 FROM Caja c WHERE c.ID_sesion = Sesion.ID_sesion"
+                ")"
+            )
             mainDAO.conn.commit()
             return mainDAO.conn
         except sqlite3.Error as err:
@@ -186,8 +206,16 @@ class mainDAO:
                 "VALUES (?, ?, ?, ?)",
                 (fechaInicio, fondoInicial, caja, passHash),
             )
+            idSesion = mainDAO.cursor.lastrowid
+            # COR3 / preparación MJ1 (N cajas): toda sesión nueva arranca con
+            # su "Caja principal" (fondo inicial = monto actual = fondoInicial).
+            mainDAO.cursor.execute(
+                "INSERT INTO Caja (ID_sesion, Nombre, Fondo_inicial, Monto) "
+                "VALUES (?, ?, ?, ?)",
+                (idSesion, "Caja principal", fondoInicial, caja),
+            )
             mainDAO.conn.commit()
-            return mainDAO.cursor.lastrowid
+            return idSesion
         except sqlite3.Error as err:
             mainDAO._manejarError(err)
 
@@ -205,6 +233,27 @@ class mainDAO:
             )
             fila = mainDAO.cursor.fetchone()
             return tuple(fila) if fila is not None else None
+        except sqlite3.Error as err:
+            mainDAO._manejarError(err)
+
+    @staticmethod
+    def verCajas(idSesion: int):
+        """Devuelve las cajas (medios de pago) de la sesión (COR3 / MJ1).
+
+        Formato de cada tupla: (ID_caja, Nombre, Fondo_inicial, Monto).
+        El valor inicial de cada caja es su Fondo_inicial; el valor
+        actual es su Monto; la caja total se calcula como la suma de
+        los Monto (query resumen en _exportarHistorial).
+        """
+        mainDAO.conectar()
+        try:
+            mainDAO.cursor.execute(
+                "SELECT ID_caja, Nombre, Fondo_inicial, Monto "
+                "FROM Caja WHERE ID_sesion = ? "
+                "ORDER BY ID_caja",
+                (idSesion,),
+            )
+            return [tuple(fila) for fila in mainDAO.cursor.fetchall()]
         except sqlite3.Error as err:
             mainDAO._manejarError(err)
 
@@ -263,7 +312,9 @@ class mainDAO:
         Hoja "Ventas": una fila por línea de detalle (fecha y hora,
         producto, cantidad, precio unitario y subtotal). Hoja "Gastos":
         una fila por gasto/reinserción (fecha y hora, nombre,
-        descripción y monto). Espejo del historial de la UI (spec.md).
+        descripción y monto). Hoja "Cajas" (COR3): por cada caja su
+        valor inicial (Fondo_inicial), valor actual (Monto) y la caja
+        total (suma de Montos). Espejo del historial de la UI (spec.md).
         """
         idSesion = mainDAO.obtenerSesion()[0]
         try:
@@ -307,6 +358,25 @@ class mainDAO:
         )
         for idGasto, nombre, monto, descripcion, fechaHora in gastos:
             hojaGastos.append([fechaHora, nombre, descripcion, monto])
+
+        # COR3: incluir valor inicial de cada caja, valor actual y caja total.
+        # Por cada caja se reporta su Fondo_inicial (valor inicial) y su Monto
+        # (valor actual). La última fila es el total de caja (suma de Montos).
+        hojaCajas = libro.create_sheet("Cajas")
+        hojaCajas.append(["Caja", "Valor inicial", "Valor actual", "Caja total"])
+        cajas = mainDAO.verCajas(idSesion)
+        for _idCaja, nombreCaja, fondoInicial, montoActual in cajas:
+            hojaCajas.append([
+                nombreCaja,
+                round(fondoInicial, 2),
+                round(montoActual, 2),
+                None,
+            ])
+        cajaTotal = round(sum(montoActual
+                              for _idCaja, _nombreCaja, _fondoInicial,
+                              montoActual in cajas), 2)
+        if cajas:
+            hojaCajas.append(["Caja total", None, None, cajaTotal])
 
         ruta = mainDAO._resolverRutaSalida(
             rutaDestino, ".xlsx", "historial"
