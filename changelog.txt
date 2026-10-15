@@ -1,3 +1,15 @@
+[2026-10-14] Agente 1 (Modelo - MJ1, MJ4, MJ7, MJ8)
+- MJ1 (multiples cajas / medios de pago): crearSesion() acepta cajas=[(nombre, monto), ...] y crea una caja por item; si no se pasa, crea la "Caja principal" (comportamiento CU1 intacto). Venta y GastoSecundario ganan la columna ID_caja (FK -> Caja) en _ESQUEMA; conectar() migra bases preexistentes con ALTER TABLE ADD COLUMN idempotente (verifica por PRAGMA table_info).
+- acceso/ventaDAO.py: registrarVenta/registrarGasto aceptan idCaja opcional (MJ1). Con idCaja la venta/gasto se asigna a esa caja y modifica su Monto por delta (montoNeto / monto firmado); Sesion.Caja sigue guardando la caja total (cajaNueva). Sin idCaja se conserva el comportamiento previo (Caja principal).
+- acceso/mainDAO.py: nuevos verTotalCajas(idSesion) -> float (suma de Montos, MJ7) y obtenerCaja(idCaja) -> tupla|None.
+- MJ4 (combos): un combo se persiste como Producto con Es_combo=1 mas sus componentes en la nueva tabla DetalleCombo (ID_combo, ID_producto, Cantidad). prodDAO suma crearCombo, verCombos, verComponentesCombo, editarCombo y eliminarCombo (transaccionales). El combo se vende como un producto mas (DetalleVenta sin cambios). Producto.Es_combo se agrega con DEFAULT 0 (migracion idempotente).
+- nuke() (CU15) ahora limpia tambien Caja y DetalleCombo.
+- MJ8 (detalles de venta en UI): no requiere cambios de modelo - prodDAO.verProductos() ya devuelve precio por producto y ventaDAO.verVentas() ya devuelve por detalle (ID_producto, Cantidad, Precio_unitario) para armar cantidades y subtotales del carrito.
+- Tests nuevos: tests/test_daos_cajas.py (MJ1/MJ7) y tests/test_daos_combos.py (MJ4). Suite completa en verde (ver mas abajo el total).
+- Verificacion: py_compile OK, CRLF preservado y suite completa 125/125 en verde.
+- AVISO A LOS DEMAS AGENTES:
+  * Agente 3 (Controlador): para asignar caja a una venta/gasto pasar idCaja junto con cajaNueva (total). verTotalCajas() disponible para el total de caja de la UI. Para combos usar los metodos nuevos de prodDAO; el stock de un combo es su columna Stock (decidir si se deriva de los componentes o se gestiona manualmente).
+  * Agente 2 (Vista): MJ7 - mostrar verTotalCajas() arriba a la derecha en Venta y verCajas()/obtenerCaja() en Configuracion de Sesion. MJ8 - el popup del carrito ya puede mostrar cantidad y subtotal (precio x cantidad) por producto con verProductos().
 [2026-10-14] Agente 1 (Modelo - COR1, COR3)
 - COR3 (exportacion a Excel con N cajas / preparacion MJ1): agregada la tabla Caja (ID_caja, ID_sesion FK, Nombre, Fondo_inicial, Monto) al esquema _ESQUEMA de acceso/mainDAO.py, con FK ON DELETE CASCADE. crearSesion() siembra la "Caja principal" de la sesion (fondo inicial = monto actual); conectar() hace un backfill idempotente (NOT EXISTS) para que las sesiones preexistentes tambien tengan su caja principal.
 - acceso/mainDAO.py: nuevo verCajas(idSesion) -> list[(ID_caja, Nombre, Fondo_inicial, Monto)]. _exportarHistorial (CU13) agrega la hoja "Cajas" con el valor inicial de cada caja, su valor actual y la caja total (suma de Montos), cumpliendo COR3.

@@ -4,17 +4,22 @@
 # (CU10/CU11/CU12/CU14) sobre la conexión compartida de mainDAO.
 #
 # Contrato acordado (definido por el Agente 3):
-#   * registrarVenta(idSesion, fechaHora, detalles, montoNeto, cajaNueva) -> int
+#   * registrarVenta(idSesion, fechaHora, detalles, montoNeto, cajaNueva,
+#                    idCaja=None) -> int
 #       Persiste Venta + sus DetalleVenta (idProducto, cantidad,
 #       precio_unitario) y ACTUALIZA la columna Sesion.Caja a cajaNueva
 #       dentro de la misma transacción. Devuelve ID_venta.
 #       montoNeto NO se persiste: Venta no tiene columna de monto en el MER
 #       y el total es derivable de los detalles (servVenta lo recalcula).
 #   * registrarGasto(idSesion, nombre, monto, descripcion, fechaHora,
-#                    cajaNueva) -> int
+#                    cajaNueva, idCaja=None) -> int
 #       Persiste GastoSecundario y ACTUALIZA Sesion.Caja a cajaNueva en la
 #       misma transacción. El monto va FIRMADO: negativo = gasto, positivo
 #       = reinserción. Devuelve ID_gasto.
+#   * MJ1 (N cajas): si idCaja llega con un ID válido, la venta/gasto se
+#       asigna a esa caja (se inserta su ID_caja) y se modifica el Monto de
+#       esa caja con el monto de la operación (delta). Sesion.Caja sigue
+#       guardando la caja total (cajaNueva, calculada por el Agente 3).
 #   * verVentas(idSesion) -> list[(ID_venta, Fecha_hora,
 #        list[(ID_producto, Cantidad, Precio_unitario)])]
 #   * verGastos(idSesion) -> list[(ID_gasto, Nombre, Monto, Descripcion,
@@ -37,18 +42,32 @@ class ventaDAO:
 
     @staticmethod
     def registrarVenta(idSesion: int, fechaHora: str, detalles: list,
-                       montoNeto: float, cajaNueva: float) -> int:
+                       montoNeto: float, cajaNueva: float,
+                       idCaja=None) -> int:
         """Persiste la venta, sus detalles y la caja; devuelve ID_venta (CU10).
 
         Todas las escrituras ocurren en UNA transacción: si algo falla,
         mainDAO._manejarError ejecuta ROLLBACK y eleva PersistenceError.
+
+        Parámetro idCaja (MJ1): si llega un ID de caja válido, la venta se
+        asigna a esa caja (columna Venta.ID_caja) y se modifica su Monto
+        sumándole montoNeto. Si idCaja es None, se conserva el
+        comportamiento previo (actualizar Sesion.Caja y la caja
+        "Caja principal" al nuevo total cajaNueva).
         """
         mainDAO.conectar()
         try:
-            mainDAO.cursor.execute(
-                "INSERT INTO Venta (ID_sesion, Fecha_hora) VALUES (?, ?)",
-                (idSesion, fechaHora),
-            )
+            if idCaja is None:
+                mainDAO.cursor.execute(
+                    "INSERT INTO Venta (ID_sesion, Fecha_hora) VALUES (?, ?)",
+                    (idSesion, fechaHora),
+                )
+            else:
+                mainDAO.cursor.execute(
+                    "INSERT INTO Venta (ID_sesion, ID_caja, Fecha_hora) "
+                    "VALUES (?, ?, ?)",
+                    (idSesion, idCaja, fechaHora),
+                )
             idVenta = mainDAO.cursor.lastrowid
             filas = [
                 (idVenta, idProducto, cantidad, precioUnitario)
@@ -64,13 +83,20 @@ class ventaDAO:
                 "UPDATE Sesion SET Caja = ? WHERE ID_sesion = ?",
                 (cajaNueva, idSesion),
             )
-            # COR3 / preparación MJ1 (N cajas): la venta modifica el monto
-            # actual de la caja principal (Monto) en la misma transacción.
-            mainDAO.cursor.execute(
-                "UPDATE Caja SET Monto = ? WHERE ID_sesion = ? "
-                "AND Nombre = 'Caja principal'",
-                (cajaNueva, idSesion),
-            )
+            if idCaja is None:
+                # Comportamiento previo (COR3): la venta modifica el monto
+                # actual de la caja principal en la misma transacción.
+                mainDAO.cursor.execute(
+                    "UPDATE Caja SET Monto = ? WHERE ID_sesion = ? "
+                    "AND Nombre = 'Caja principal'",
+                    (cajaNueva, idSesion),
+                )
+            else:
+                # MJ1: la venta modifica el monto de la caja asignada.
+                mainDAO.cursor.execute(
+                    "UPDATE Caja SET Monto = Monto + ? WHERE ID_caja = ?",
+                    (montoNeto, idCaja),
+                )
             mainDAO.conn.commit()
             return idVenta
         except sqlite3.Error as err:
@@ -79,33 +105,53 @@ class ventaDAO:
     @staticmethod
     def registrarGasto(idSesion: int, nombre: str, monto: float,
                        descripcion: str, fechaHora: str,
-                       cajaNueva: float) -> int:
+                       cajaNueva: float, idCaja=None) -> int:
         """Persiste gasto/reinserción y caja; devuelve ID_gasto (CU11).
 
         El monto llega FIRMADO desde el servicio (negativo = gasto,
         positivo = reinserción); se guarda tal cual en GastoSecundario
         y Sesion.Caja se actualiza a cajaNueva en la misma transacción.
+
+        Parámetro idCaja (MJ1): si llega un ID de caja válido, el gasto/
+        reinserción se asigna a esa caja (columna ID_caja) y se modifica
+        su Monto con el monto firmado (delta). Si idCaja es None, se
+        conserva el comportamiento previo (Caja principal).
         """
         mainDAO.conectar()
         try:
-            mainDAO.cursor.execute(
-                "INSERT INTO GastoSecundario "
-                "(ID_sesion, Nombre, Monto, Descripcion, Fecha_hora) "
-                "VALUES (?, ?, ?, ?, ?)",
-                (idSesion, nombre, monto, descripcion, fechaHora),
-            )
+            if idCaja is None:
+                mainDAO.cursor.execute(
+                    "INSERT INTO GastoSecundario "
+                    "(ID_sesion, Nombre, Monto, Descripcion, Fecha_hora) "
+                    "VALUES (?, ?, ?, ?, ?)",
+                    (idSesion, nombre, monto, descripcion, fechaHora),
+                )
+            else:
+                mainDAO.cursor.execute(
+                    "INSERT INTO GastoSecundario "
+                    "(ID_sesion, ID_caja, Nombre, Monto, Descripcion, "
+                    "Fecha_hora) VALUES (?, ?, ?, ?, ?, ?)",
+                    (idSesion, idCaja, nombre, monto, descripcion, fechaHora),
+                )
             idGasto = mainDAO.cursor.lastrowid
             mainDAO.cursor.execute(
                 "UPDATE Sesion SET Caja = ? WHERE ID_sesion = ?",
                 (cajaNueva, idSesion),
             )
-            # COR3 / preparación MJ1 (N cajas): el gasto/reinserción modifica
-            # el monto actual de la caja principal (Monto) en la misma transacción.
-            mainDAO.cursor.execute(
-                "UPDATE Caja SET Monto = ? WHERE ID_sesion = ? "
-                "AND Nombre = 'Caja principal'",
-                (cajaNueva, idSesion),
-            )
+            if idCaja is None:
+                # Comportamiento previo (COR3): el gasto/reinserción modifica
+                # el monto actual de la caja principal en la misma transacción.
+                mainDAO.cursor.execute(
+                    "UPDATE Caja SET Monto = ? WHERE ID_sesion = ? "
+                    "AND Nombre = 'Caja principal'",
+                    (cajaNueva, idSesion),
+                )
+            else:
+                # MJ1: el gasto/reinserción modifica la caja asignada.
+                mainDAO.cursor.execute(
+                    "UPDATE Caja SET Monto = Monto + ? WHERE ID_caja = ?",
+                    (monto, idCaja),
+                )
             mainDAO.conn.commit()
             return idGasto
         except sqlite3.Error as err:

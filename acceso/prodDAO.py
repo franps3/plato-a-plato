@@ -14,6 +14,12 @@
 #       Actualiza nombre y precio; None si el producto no existe.
 #   * eliminarProducto(idProducto) -> int
 #       Elimina el producto y devuelve filas afectadas (1 si existía).
+#   * MJ4 (combos): un combo se persiste como un Producto con Es_combo=1
+#     más sus componentes en DetalleCombo (ID_combo, ID_producto,
+#     Cantidad). Métodos: crearCombo, verCombos, verComponentesCombo,
+#     editarCombo y eliminarCombo. DetalleVenta no cambia: el combo se
+#     vende como un producto más ("agregar a una venta como un producto
+#     más"). verProductos() los incluye junto con los productos comunes.
 #
 # Regla clave de Agente 1: capturar sqlite3.Error, ejecutar ROLLBACK y
 # re-elevar como subclase de PersistenceError (control.excepciones).
@@ -92,6 +98,138 @@ class prodDAO:
             mainDAO.cursor.execute(
                 "DELETE FROM Producto WHERE ID_producto = ?",
                 (idProducto,),
+            )
+            mainDAO.conn.commit()
+            return mainDAO.cursor.rowcount
+        except sqlite3.Error as err:
+            mainDAO._manejarError(err)
+
+    @staticmethod
+    def crearCombo(idSesion: int, nombre: str, precio: float,
+                   componentes: list, stock: int = 0) -> int:
+        """Persiste un combo como Producto (Es_combo=1) + sus componentes (MJ4).
+
+        Parámetros:
+            componentes: lista de tuplas (ID_producto, Cantidad) con los
+                productos y cantidades que componen UNA unidad del combo.
+            stock: stock propio del combo (opcional; por defecto 0). El
+                Agente 3 decide si deriva la disponibilidad desde los
+                componentes o gestiona este valor.
+
+        Toda la escritura ocurre en UNA transacción: si algo falla,
+        mainDAO._manejarError ejecuta ROLLBACK y eleva PersistenceError.
+        Devuelve el ID_producto del combo creado.
+        """
+        mainDAO.conectar()
+        try:
+            mainDAO.cursor.execute(
+                "INSERT INTO Producto "
+                "(ID_sesion, Nombre, Stock, Precio, Es_combo) "
+                "VALUES (?, ?, ?, ?, 1)",
+                (idSesion, nombre, stock, precio),
+            )
+            idCombo = mainDAO.cursor.lastrowid
+            filas = [
+                (idCombo, idProducto, cantidad)
+                for (idProducto, cantidad) in componentes
+            ]
+            mainDAO.cursor.executemany(
+                "INSERT INTO DetalleCombo "
+                "(ID_combo, ID_producto, Cantidad) VALUES (?, ?, ?)",
+                filas,
+            )
+            mainDAO.conn.commit()
+            return idCombo
+        except sqlite3.Error as err:
+            mainDAO._manejarError(err)
+
+    @staticmethod
+    def verCombos(idSesion: int):
+        """Devuelve los combos de la sesión: list[(ID_combo, Nombre, Precio)].
+
+        Un combo es un Producto con Es_combo=1 (MJ4). Orden alfabético por
+        nombre sin distinguir mayúsculas, igual que verProductos.
+        """
+        mainDAO.conectar()
+        try:
+            mainDAO.cursor.execute(
+                "SELECT ID_producto, Nombre, Precio FROM Producto "
+                "WHERE ID_sesion = ? AND Es_combo = 1 "
+                "ORDER BY Nombre COLLATE NOCASE",
+                (idSesion,),
+            )
+            return [tuple(fila) for fila in mainDAO.cursor.fetchall()]
+        except sqlite3.Error as err:
+            mainDAO._manejarError(err)
+
+    @staticmethod
+    def verComponentesCombo(idCombo: int):
+        """Devuelve los componentes de un combo: list[(ID_producto, Cantidad)].
+
+        Consulta sobre DetalleCombo (MJ4): cada fila indica qué producto y
+        cuántas unidades componen UNA unidad del combo.
+        """
+        mainDAO.conectar()
+        try:
+            mainDAO.cursor.execute(
+                "SELECT ID_producto, Cantidad FROM DetalleCombo "
+                "WHERE ID_combo = ? ORDER BY ID_producto",
+                (idCombo,),
+            )
+            return [tuple(fila) for fila in mainDAO.cursor.fetchall()]
+        except sqlite3.Error as err:
+            mainDAO._manejarError(err)
+
+    @staticmethod
+    def editarCombo(idCombo: int, nombre: str, precio: float,
+                    componentes: list):
+        """Actualiza nombre, precio y componentes de un combo (MJ4).
+
+        Reemplaza los componentes (DELETE + INSERT) en la MISMA transacción
+        para no dejar el combo a medias. Devuelve (ID_combo, Nombre, Precio)
+        o None si el ID no corresponde a un combo (Es_combo=1).
+        """
+        mainDAO.conectar()
+        try:
+            mainDAO.cursor.execute(
+                "UPDATE Producto SET Nombre = ?, Precio = ? "
+                "WHERE ID_producto = ? AND Es_combo = 1",
+                (nombre, precio, idCombo),
+            )
+            if mainDAO.cursor.rowcount == 0:
+                return None
+            mainDAO.cursor.execute(
+                "DELETE FROM DetalleCombo WHERE ID_combo = ?",
+                (idCombo,),
+            )
+            filas = [
+                (idCombo, idProducto, cantidad)
+                for (idProducto, cantidad) in componentes
+            ]
+            mainDAO.cursor.executemany(
+                "INSERT INTO DetalleCombo "
+                "(ID_combo, ID_producto, Cantidad) VALUES (?, ?, ?)",
+                filas,
+            )
+            mainDAO.conn.commit()
+            return (idCombo, nombre, precio)
+        except sqlite3.Error as err:
+            mainDAO._manejarError(err)
+
+    @staticmethod
+    def eliminarCombo(idCombo: int) -> int:
+        """Elimina un combo (Producto Es_combo=1) y sus componentes (MJ4).
+
+        La FK ON DELETE CASCADE de DetalleCombo limpia los componentes.
+        Devuelve filas afectadas (1 si era un combo; 0 si no existía o era
+        un producto común). Los combos ya vendidos también se limpian por la
+        FK CASCADE de DetalleVenta.
+        """
+        mainDAO.conectar()
+        try:
+            mainDAO.cursor.execute(
+                "DELETE FROM Producto WHERE ID_producto = ? AND Es_combo = 1",
+                (idCombo,),
             )
             mainDAO.conn.commit()
             return mainDAO.cursor.rowcount

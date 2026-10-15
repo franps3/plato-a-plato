@@ -5,8 +5,11 @@
 # (CU1/CU2/CU3).
 #
 # Contrato acordado (definido por el Agente 3):
-#   * crearSesion(passHash, fondoInicial, caja, fechaInicio) -> int
-#       Persiste la sesión única y devuelve su ID_sesion.
+#   * crearSesion(passHash, fondoInicial, caja, fechaInicio,
+#                 cajas=None) -> int
+#       Persiste la sesión única y devuelve su ID_sesion. Si cajas es una
+#       lista de (nombre, monto) se crea una caja por ítem (MJ1); si no,
+#       crea la "Caja principal" con el fondo inicial (comportamiento CU1).
 #   * obtenerSesion() -> tuple | None
 #       Devuelve (ID_sesion, Fecha_inicio, Fondo_inicial, Caja, Pass)
 #       de la sesión registrada, o None si no existe.
@@ -21,6 +24,11 @@
 #       la sesión importada (la "clave" que se asigna al importar).
 #       Devuelve la tupla (ID_sesion, Fecha_inicio, Fondo_inicial,
 #       Caja, Pass) de la sesión importada.
+#   * verCajas(idSesion) -> list[(ID_caja, Nombre, Fondo_inicial, Monto)]
+#   * verTotalCajas(idSesion) -> float
+#       Suma de los Monto de todas las cajas (caja total de la sesión).
+#   * obtenerCaja(idCaja) -> tuple | None
+#       Devuelve (ID_caja, ID_sesion, Nombre, Fondo_inicial, Monto).
 #
 # Regla clave de Agente 1: capturar sqlite3.Error, ejecutar ROLLBACK y
 # re-elevar como subclase de PersistenceError (control.excepciones).
@@ -93,20 +101,32 @@ class mainDAO:
         Pass TEXT NOT NULL
     );
 
+    CREATE TABLE IF NOT EXISTS Caja (
+        ID_caja INTEGER PRIMARY KEY AUTOINCREMENT,
+        ID_sesion INTEGER NOT NULL,
+        Nombre TEXT NOT NULL,
+        Fondo_inicial REAL NOT NULL,
+        Monto REAL NOT NULL,
+        FOREIGN KEY (ID_sesion) REFERENCES Sesion(ID_sesion) ON DELETE CASCADE
+    );
+
     CREATE TABLE IF NOT EXISTS Producto (
         ID_producto INTEGER PRIMARY KEY AUTOINCREMENT,
         ID_sesion INTEGER NOT NULL,
         Nombre TEXT NOT NULL,
         Stock INTEGER NOT NULL,
         Precio REAL NOT NULL,
+        Es_combo INTEGER NOT NULL DEFAULT 0,
         FOREIGN KEY (ID_sesion) REFERENCES Sesion(ID_sesion) ON DELETE CASCADE
     );
 
     CREATE TABLE IF NOT EXISTS Venta (
         ID_venta INTEGER PRIMARY KEY AUTOINCREMENT,
         ID_sesion INTEGER NOT NULL,
+        ID_caja INTEGER,
         Fecha_hora TEXT NOT NULL,
-        FOREIGN KEY (ID_sesion) REFERENCES Sesion(ID_sesion) ON DELETE CASCADE
+        FOREIGN KEY (ID_sesion) REFERENCES Sesion(ID_sesion) ON DELETE CASCADE,
+        FOREIGN KEY (ID_caja) REFERENCES Caja(ID_caja)
     );
 
     CREATE TABLE IF NOT EXISTS DetalleVenta (
@@ -122,20 +142,22 @@ class mainDAO:
     CREATE TABLE IF NOT EXISTS GastoSecundario (
         ID_gasto INTEGER PRIMARY KEY AUTOINCREMENT,
         ID_sesion INTEGER NOT NULL,
+        ID_caja INTEGER,
         Nombre TEXT NOT NULL,
         Monto REAL NOT NULL,
         Descripcion TEXT,
         Fecha_hora TEXT NOT NULL,
-        FOREIGN KEY (ID_sesion) REFERENCES Sesion(ID_sesion) ON DELETE CASCADE
+        FOREIGN KEY (ID_sesion) REFERENCES Sesion(ID_sesion) ON DELETE CASCADE,
+        FOREIGN KEY (ID_caja) REFERENCES Caja(ID_caja)
     );
 
-    CREATE TABLE IF NOT EXISTS Caja (
-        ID_caja INTEGER PRIMARY KEY AUTOINCREMENT,
-        ID_sesion INTEGER NOT NULL,
-        Nombre TEXT NOT NULL,
-        Fondo_inicial REAL NOT NULL,
-        Monto REAL NOT NULL,
-        FOREIGN KEY (ID_sesion) REFERENCES Sesion(ID_sesion) ON DELETE CASCADE
+    CREATE TABLE IF NOT EXISTS DetalleCombo (
+        ID_combo INTEGER NOT NULL,
+        ID_producto INTEGER NOT NULL,
+        Cantidad INTEGER NOT NULL,
+        PRIMARY KEY (ID_combo, ID_producto),
+        FOREIGN KEY (ID_combo) REFERENCES Producto(ID_producto) ON DELETE CASCADE,
+        FOREIGN KEY (ID_producto) REFERENCES Producto(ID_producto) ON DELETE CASCADE
     );
 
     CREATE INDEX IF NOT EXISTS idx_producto_sesion ON Producto(ID_sesion);
@@ -143,6 +165,8 @@ class mainDAO:
     CREATE INDEX IF NOT EXISTS idx_detalle_venta ON DetalleVenta(ID_venta);
     CREATE INDEX IF NOT EXISTS idx_detalle_producto ON DetalleVenta(ID_Producto);
     CREATE INDEX IF NOT EXISTS idx_gasto_sesion ON GastoSecundario(ID_sesion);
+    CREATE INDEX IF NOT EXISTS idx_caja_sesion ON Caja(ID_sesion);
+    CREATE INDEX IF NOT EXISTS idx_detalle_combo ON DetalleCombo(ID_combo);
     """
 
     @staticmethod
@@ -171,6 +195,31 @@ class mainDAO:
                 "    SELECT 1 FROM Caja c WHERE c.ID_sesion = Sesion.ID_sesion"
                 ")"
             )
+            # Migración MJ1/MJ4: agrega las columnas nuevas sobre bases
+            # creadas antes de estas mejoras. SQLite no permite
+            # "ADD COLUMN IF NOT EXISTS": se verifica por columna con PRAGMA
+            # table_info y se agrega lo que falte (idempotente). Los valores
+            # por defecto mantienen compatibles los datos históricos.
+            _migracionColumnas = (
+                ("Producto", "Es_combo",
+                 "ALTER TABLE Producto ADD COLUMN "
+                 "Es_combo INTEGER NOT NULL DEFAULT 0"),
+                ("Venta", "ID_caja",
+                 "ALTER TABLE Venta ADD COLUMN "
+                 "ID_caja INTEGER REFERENCES Caja(ID_caja)"),
+                ("GastoSecundario", "ID_caja",
+                 "ALTER TABLE GastoSecundario ADD COLUMN "
+                 "ID_caja INTEGER REFERENCES Caja(ID_caja)"),
+            )
+            for nombreTabla, nombreColumna, ddl in _migracionColumnas:
+                columnas = {
+                    fila[1]
+                    for fila in mainDAO.cursor.execute(
+                        f"PRAGMA table_info({nombreTabla})"
+                    )
+                }
+                if nombreColumna not in columnas:
+                    mainDAO.cursor.execute(ddl)
             mainDAO.conn.commit()
             return mainDAO.conn
         except sqlite3.Error as err:
@@ -193,11 +242,17 @@ class mainDAO:
 
     @staticmethod
     def crearSesion(passHash: str, fondoInicial: float, caja: float,
-                    fechaInicio: str) -> int:
+                    fechaInicio: str, cajas=None) -> int:
         """Persiste la sesión única y devuelve su ID_sesion (CU1).
 
         La sesión es única en la base: el controlador valida antes de
         llamar que no exista una sesión registrada (SesionYaExiste).
+
+        Parámetros:
+            cajas: opcional (MJ1). Lista de (nombre, monto) con las cajas
+                (medios de pago) que se crean junto con la sesión. Si no
+                se pasa o viene vacía, se crea la "Caja principal" con el
+                fondoInicial (comportamiento original del CU1).
         """
         mainDAO.conectar()
         try:
@@ -207,13 +262,15 @@ class mainDAO:
                 (fechaInicio, fondoInicial, caja, passHash),
             )
             idSesion = mainDAO.cursor.lastrowid
-            # COR3 / preparación MJ1 (N cajas): toda sesión nueva arranca con
-            # su "Caja principal" (fondo inicial = monto actual = fondoInicial).
-            mainDAO.cursor.execute(
-                "INSERT INTO Caja (ID_sesion, Nombre, Fondo_inicial, Monto) "
-                "VALUES (?, ?, ?, ?)",
-                (idSesion, "Caja principal", fondoInicial, caja),
-            )
+            # MJ1 (N cajas): la sesión arranca con las cajas indicadas o,
+            # por defecto, con su "Caja principal" (fondo = monto actual).
+            cajasCrear = cajas if cajas else [("Caja principal", caja)]
+            for nombreCaja, montoCaja in cajasCrear:
+                mainDAO.cursor.execute(
+                    "INSERT INTO Caja (ID_sesion, Nombre, Fondo_inicial, "
+                    "Monto) VALUES (?, ?, ?, ?)",
+                    (idSesion, nombreCaja, montoCaja, montoCaja),
+                )
             mainDAO.conn.commit()
             return idSesion
         except sqlite3.Error as err:
@@ -258,19 +315,57 @@ class mainDAO:
             mainDAO._manejarError(err)
 
     @staticmethod
+    def verTotalCajas(idSesion: int) -> float:
+        """Devuelve la suma de los Monto de todas las cajas (MJ1/MJ7).
+
+        Representa la caja total de la sesión (el total que se muestra en
+        la pantalla de Venta y en la hoja "Cajas" de la exportación).
+        """
+        mainDAO.conectar()
+        try:
+            mainDAO.cursor.execute(
+                "SELECT COALESCE(SUM(Monto), 0) FROM Caja "
+                "WHERE ID_sesion = ?",
+                (idSesion,),
+            )
+            return float(mainDAO.cursor.fetchone()[0])
+        except sqlite3.Error as err:
+            mainDAO._manejarError(err)
+
+    @staticmethod
+    def obtenerCaja(idCaja: int):
+        """Devuelve una caja por su ID o None si no existe (MJ1).
+
+        Tupla cruda: (ID_caja, ID_sesion, Nombre, Fondo_inicial, Monto).
+        """
+        mainDAO.conectar()
+        try:
+            mainDAO.cursor.execute(
+                "SELECT ID_caja, ID_sesion, Nombre, Fondo_inicial, Monto "
+                "FROM Caja WHERE ID_caja = ?",
+                (idCaja,),
+            )
+            fila = mainDAO.cursor.fetchone()
+            return tuple(fila) if fila is not None else None
+        except sqlite3.Error as err:
+            mainDAO._manejarError(err)
+
+    @staticmethod
     def nuke():
         """Borra la sesión y toda la base de datos local (CU15 reiniciar).
 
-        Elimina todos los datos (sesión, productos, ventas, detalles y
-        gastos) restaurando la aplicación a cero. El archivo bd.db y el
-        esquema se conservan para la próxima creación de sesión.
+        Elimina todos los datos (sesión, cajas, productos, combos, ventas,
+        detalles y gastos) restaurando la aplicación a cero. El archivo
+        bd.db y el esquema se conservan para la próxima creación de sesión.
         """
         mainDAO.conectar()
         try:
             mainDAO.cursor.execute("DELETE FROM DetalleVenta")
+            mainDAO.cursor.execute("DELETE FROM DetalleCombo")
             mainDAO.cursor.execute("DELETE FROM Venta")
             mainDAO.cursor.execute("DELETE FROM GastoSecundario")
             mainDAO.cursor.execute("DELETE FROM Producto")
+            mainDAO.cursor.execute("DELETE FROM Caja")
             mainDAO.cursor.execute("DELETE FROM Sesion")
             mainDAO.conn.commit()
         except sqlite3.Error as err:
@@ -372,9 +467,7 @@ class mainDAO:
                 round(montoActual, 2),
                 None,
             ])
-        cajaTotal = round(sum(montoActual
-                              for _idCaja, _nombreCaja, _fondoInicial,
-                              montoActual in cajas), 2)
+        cajaTotal = round(mainDAO.verTotalCajas(idSesion), 2)
         if cajas:
             hojaCajas.append(["Caja total", None, None, cajaTotal])
 
