@@ -1,3 +1,9 @@
+[2026-10-15] Agente 2 (Vista)
+- COR1 (historial): corregida la alineación de las filas del historial usando columnas fijas ([Tipo] [Fecha y hora] [Detalle] [Monto]) y ahora cada gasto secundario muestra su descripción debajo del nombre.
+- COR2 (descuento de stock en vivo): la pantalla de Venta usa controlador.verProductosVenta() (stock disponible = real menos lo reservado en el carrito, implementado por Agente 3) y refresca el listado al agregar o quitar unidades, reflejando el descuento/reintegro de stock en el acto.
+- COR3 (exportación Excel): la parte de datos ya la resolvió Agente 1 en mainDAO.exportar("historial", ...) (hoja Cajas con valor inicial/actual de cada caja y caja total, y hoja Gastos con descripciones); sin cambios de Vista requeridos. Validado con la suite completa.
+- COR4 (gestor de sesión): eliminado el selector (CTkSegmentedButton) obsoleto de crear/iniciar sesión; el login muestra directamente el formulario correspondiente según haySesion().
+- Verificación: compilación OK, import de vistas OK y suite completa 125/125 tests en verde (sin regresiones).
 [2026-10-14] Agente 1 (Modelo - MJ1, MJ4, MJ7, MJ8)
 - MJ1 (multiples cajas / medios de pago): crearSesion() acepta cajas=[(nombre, monto), ...] y crea una caja por item; si no se pasa, crea la "Caja principal" (comportamiento CU1 intacto). Venta y GastoSecundario ganan la columna ID_caja (FK -> Caja) en _ESQUEMA; conectar() migra bases preexistentes con ALTER TABLE ADD COLUMN idempotente (verifica por PRAGMA table_info).
 - acceso/ventaDAO.py: registrarVenta/registrarGasto aceptan idCaja opcional (MJ1). Con idCaja la venta/gasto se asigna a esa caja y modifica su Monto por delta (montoNeto / monto firmado); Sesion.Caja sigue guardando la caja total (cajaNueva). Sin idCaja se conserva el comportamiento previo (Caja principal).

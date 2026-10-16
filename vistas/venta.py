@@ -129,8 +129,13 @@ class VistaVenta(ctk.CTkFrame):
     # Refresco del catálogo
     # ------------------------------------------------------------------
     def refrescarProductos(self):
-        """Consulta el catálogo al controlador y vuelve a renderizar la lista."""
-        resultado = self.controlador.verProductos()
+        """Consulta el catálogo al controlador y vuelve a renderizar la lista.
+
+        COR2: usa verProductosVenta() para que el stock mostrado sea el
+        DISPONIBLE (stock real menos lo reservado en el carrito), logrando el
+        descuento de stock "en vivo" en la pantalla de venta.
+        """
+        resultado = self.controlador.verProductosVenta()
         if resultado["ok"]:
             self.productos = resultado["datos"] or []
         else:
@@ -198,10 +203,12 @@ class VistaVenta(ctk.CTkFrame):
     # Carrito: agregar / abrir popup
     # ------------------------------------------------------------------
     def _agregarAlCarrito(self, producto):
-        """Suma una unidad del producto (CU9) y avisa si no hay stock."""
+        """Suma una unidad del producto (CU9) y refresca el stock en vivo (COR2)."""
         resultado = self.controlador.agregarProd(producto.idProducto)
         if not resultado["ok"]:
             self._alerta(resultado["mensaje"])
+        # COR2: el stock DISPONIBLE del listado baja en el acto.
+        self.refrescarProductos()
 
     def _abrirCarrito(self):
         """Abre el popup del carrito; si está vacío, lo avisa."""
@@ -342,10 +349,12 @@ class VistaVenta(ctk.CTkFrame):
     # Carrito: acciones de líneas
     # ------------------------------------------------------------------
     def _carritoAgregar(self, producto):
-        """Suma una unidad desde el popup (CU9) y refresca el carrito."""
+        """Suma una unidad desde el popup (CU9) y refresca carrito y stock."""
         resultado = self.controlador.agregarProd(producto.idProducto)
         if not resultado["ok"]:
             self._alerta(resultado["mensaje"])
+        # COR2: el stock DISPONIBLE del listado baja en el acto.
+        self.refrescarProductos()
         self._refrescarCarrito()
 
     def _carritoQuitar(self, producto):
@@ -354,6 +363,8 @@ class VistaVenta(ctk.CTkFrame):
         if not self.controlador.carrito:
             self._cerrarCarrito()
             return
+        # COR2: al liberar unidades, el stock DISPONIBLE vuelve a subir.
+        self.refrescarProductos()
         self._refrescarCarrito()
 
     def _carritoEliminar(self, producto):
@@ -363,6 +374,8 @@ class VistaVenta(ctk.CTkFrame):
         if not self.controlador.carrito:
             self._cerrarCarrito()
             return
+        # COR2: al liberar unidades, el stock DISPONIBLE vuelve a subir.
+        self.refrescarProductos()
         self._refrescarCarrito()
 
     # ------------------------------------------------------------------

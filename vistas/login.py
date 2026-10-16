@@ -29,13 +29,12 @@ class VistaLogin(ctk.CTkFrame):
         self.controlador = controlador
         # Callback que invoca el shell cuando la sesión queda activa.
         self.alAutenticar = alAutenticar
-        # Pantalla correcta según exista o no una sesión registrada.
+        # COR4: sin selector de modo. Según exista o no una sesión registrada
+        # la pantalla muestra directamente el formulario de ingresar o crear.
         resultado = controlador.haySesion()
         if resultado["ok"] and resultado["datos"]:
-            self.existeSesion = True
             self.modo = "ingresar"
         else:
-            self.existeSesion = False
             self.modo = "crear"
         self._construir()
 
@@ -59,25 +58,14 @@ class VistaLogin(ctk.CTkFrame):
             text_color=estilos.TEXTO_TENUE,
         ).pack(padx=40, pady=(0, 18))
 
-        # Selector de modo: según exista sesión se muestra la pantalla correcta.
-        valores = ["Crear sesión"] if not self.existeSesion else ["Ingresar"]
-        self.selector = ctk.CTkSegmentedButton(
-            tarjeta, values=valores,
-            font=estilos.F_NORMAL,
-            fg_color=estilos.FONDO,
-            selected_color=estilos.BOTON_BARRA_ACTIVO,
-            selected_hover_color=estilos.BOTON_BARRA_HOVER,
-            unselected_color=estilos.BOTON_BARRA,
-            unselected_hover_color=estilos.BOTON_BARRA_HOVER,
-        )
-        self.selector.set(valores[0])
-        self.selector.pack(padx=40, pady=(0, 18), fill="x")
+        # COR4: el selector de crear/iniciar sesión fue eliminado; la pantalla
+        # muestra directamente el formulario correspondiente (self.modo).
 
         # Campo de contraseña.
         ctk.CTkLabel(
             tarjeta, text="Contraseña", font=estilos.F_BOLD,
             text_color=estilos.TEXTO_CLARO, anchor="w",
-        ).pack(padx=40, fill="x")
+        ).pack(padx=40, pady=(6, 0), fill="x")
         self.entradaPass = ctk.CTkEntry(
             tarjeta, show="*", font=estilos.F_NORMAL, height=40,
             fg_color=estilos.ENTRADA, text_color=estilos.ENTRADA_TEXTO,
