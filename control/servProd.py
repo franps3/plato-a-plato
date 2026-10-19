@@ -71,3 +71,63 @@ class ServProd:
             raise ProductoNoEncontrado(
                 "No se encontró el producto a eliminar."
             )
+
+    # ------------------------------------------------------------------
+    # MJ4: combos
+    # ------------------------------------------------------------------
+    def crearCombo(self, idSesion, nombre, precio, componentes) -> int:
+        """Crea un combo (producto con Es_combo=1) y sus componentes (MJ4).
+
+        Parámetros:
+            idSesion: Sesión activa.
+            nombre: Nombre del combo.
+            precio: Precio unitario del combo.
+            componentes: lista de (idProducto, cantidad) que componen una
+                unidad del combo.
+
+        Retorna el ID_combo del combo creado.
+        """
+        nombreLimpio = self._validarNombre(nombre)
+        precioLimpio = self._validarPrecio(precio)
+        if not isinstance(componentes, (list, tuple)):
+            raise ValueError("Los componentes deben ser una lista de (idProducto, cantidad).")
+        for idProducto, cantidad in componentes:
+            if not isinstance(cantidad, (int, float)) or cantidad <= 0:
+                raise ValueError(
+                    f"La cantidad del componente {idProducto} debe ser mayor a cero."
+                )
+        idCombo = self.prodDAO.crearCombo(
+            idSesion, nombreLimpio, precioLimpio, list(componentes)
+        )
+        return idCombo
+
+    def verCombos(self, idSesion) -> list:
+        """Lista los combos de la sesión (MJ4).
+
+        Retorna list[(ID_combo, Nombre, Precio)] ordenado alfabéticamente.
+        """
+        return self.prodDAO.verCombos(idSesion)
+
+    def verComponentesCombo(self, idCombo) -> list:
+        """Devuelve los componentes de un combo: list[(ID_producto, Cantidad)] (MJ4)."""
+        return self.prodDAO.verComponentesCombo(idCombo)
+
+    def editarCombo(self, idCombo, nombre, precio, componentes):
+        """Actualiza nombre, precio y componentes de un combo (MJ4).
+
+        Retorna (ID_combo, Nombre, Precio) o None si no es un combo existente.
+        """
+        nombreLimpio = self._validarNombre(nombre)
+        precioLimpio = self._validarPrecio(precio)
+        if not isinstance(componentes, (list, tuple)):
+            raise ValueError("Los componentes deben ser una lista de (idProducto, cantidad).")
+        return self.prodDAO.editarCombo(
+            idCombo, nombreLimpio, precioLimpio, list(componentes)
+        )
+
+    def eliminarCombo(self, idCombo) -> int:
+        """Elimina un combo y sus componentes (MJ4).
+
+        Retorna filas afectadas (1 si era un combo, 0 si no).
+        """
+        return self.prodDAO.eliminarCombo(idCombo)

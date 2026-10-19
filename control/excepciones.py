@@ -104,3 +104,8 @@ class MontoInvalido(DomainError):
 class VentaNoEncontrada(DomainError):
     """No existe la venta solicitada en la sesión."""
     pass
+
+
+class CajaNoEncontrada(DomainError):
+    """No existe la caja solicitada (ID de caja inválido)."""
+    pass

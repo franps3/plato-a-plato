@@ -1,3 +1,12 @@
+- MJ1 (cajas/medios de pago): crearSesion(password, fondoInicial, cajas=None) reenvía cajas a mainDAO; verCajas(idSesion), verTotalCajas(idSesion), obtenerCaja(idCaja) listan/suman/obtienen cajas de la sesión; confirmarVenta/gasto/reinsertar aceptan idCaja opcional y lo reenvían a ventaDAO; CajaNoEncontrada para caja inexistente.
+- MJ4 (combos): crearCombo/verCombos/verComponentesCombo/editarCombo/eliminarCombo en el controlador delegan en servProd/prodDAO (validan nombre, precio y componentes).
+- MJ7 (total de caja): verTotalCajas disponible para mostrar el total de caja en la UI de Venta.
+- MJ8 (detalles de venta en carrito): ya resuelto vía verProductosVenta (COR2, descuento de stock en vivo/reserva visual) y carrito; sin cambios de controlador.
+- idCaja es opcional (default None) en confirmarVenta/gasto/reinsertar, por lo que llamadas existentes sin caja no se ven afectadas (contrato estable).
+- Tests nuevos: tests/test_controlador_mj1_mj4.py (MJ1 cajas y MJ4 combos usando fakes).
+- Verificación: py_compile OK, suite completa en verde.
+
+
 [2026-10-15] Agente 2 (Vista)
 - COR1 (historial): corregida la alineación de las filas del historial usando columnas fijas ([Tipo] [Fecha y hora] [Detalle] [Monto]) y ahora cada gasto secundario muestra su descripción debajo del nombre.
 - COR2 (descuento de stock en vivo): la pantalla de Venta usa controlador.verProductosVenta() (stock disponible = real menos lo reservado en el carrito, implementado por Agente 3) y refresca el listado al agregar o quitar unidades, reflejando el descuento/reintegro de stock en el acto.

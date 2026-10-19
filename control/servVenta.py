@@ -44,7 +44,7 @@ class ServVenta:
     # ------------------------------------------------------------------
     # CU10: registrarVenta
     # ------------------------------------------------------------------
-    def registrarVenta(self, idSesion, detalles, cajaNueva) -> Venta:
+    def registrarVenta(self, idSesion, detalles, cajaNueva, idCaja=None) -> Venta:
         """Registra una venta multiproducto (CU10).
 
         La validación de stock suficiente ocurre ANTES de persistir:
@@ -57,6 +57,9 @@ class ServVenta:
             detalles: Lista de DetalleVenta ya armados por el controlador
                 (con precio unitario actual).
             cajaNueva: Nuevo saldo de caja tras sumar el total de la venta.
+            idCaja: (MJ1) ID opcional de la caja a la que se asigna la venta;
+                si se pasa, el monto se suma a esa caja y se registra la
+                asignación en la venta.
         """
         # Marca de tiempo estrictamente creciente (CU12).
         fechaHora = self._nuevaFechaHora()
@@ -79,7 +82,7 @@ class ServVenta:
             for d in detalles
         ]
         idVenta = self.ventaDAO.registrarVenta(
-            idSesion, fechaHora, filas, montoNeto, cajaNueva
+            idSesion, fechaHora, filas, montoNeto, cajaNueva, idCaja
         )
         return Venta(
             idVenta=idVenta,
@@ -92,35 +95,43 @@ class ServVenta:
     # CU11: registrarGasto / registrarReinsercion
     # ------------------------------------------------------------------
     def registrarGasto(self, idSesion, nombre, monto, descripcion,
-                       cajaNueva) -> GastoSecundario:
+                       cajaNueva, idCaja=None) -> GastoSecundario:
         """Registra un egreso de caja (CU11, tipo 'gasto').
 
         El monto FIRMADO se guarda en negativo (gasto): el tipo sale del
         signo al leer el historial. ventaDAO persiste el gasto y el nuevo
         saldo de caja en la misma transacción.
+
+        Parámetro idCaja (MJ1): si se pasa, el gasto se asigna a esa caja
+        (se descuenta su monto) y se registra la asignación.
         """
         return self._registrarMovimientoCaja(
-            idSesion, nombre, -abs(monto), descripcion, cajaNueva
+            idSesion, nombre, -abs(monto), descripcion, cajaNueva, idCaja
         )
 
     def registrarReinsercion(self, idSesion, nombre, monto, descripcion,
-                             cajaNueva) -> GastoSecundario:
+                             cajaNueva, idCaja=None) -> GastoSecundario:
         """Registra una reinserción de dinero a caja (CU11, 'reinsertar').
 
         El monto FIRMADO se guarda en positivo (reinserción): el tipo sale
         del signo al leer el historial.
+
+        Parámetro idCaja (MJ1): si se pasa, la reinserción se asigna a esa
+        caja (se suma su monto) y se registra la asignación.
         """
         return self._registrarMovimientoCaja(
-            idSesion, nombre, abs(monto), descripcion, cajaNueva
+            idSesion, nombre, abs(monto), descripcion, cajaNueva, idCaja
         )
 
     def _registrarMovimientoCaja(self, idSesion, nombre, montoFirmado,
-                                 descripcion, cajaNueva) -> GastoSecundario:
+                                 descripcion, cajaNueva, idCaja=None
+                                 ) -> GastoSecundario:
         """Registra un gasto o reinserción en la caja (CU11)."""
         # Marca de tiempo estrictamente creciente (CU12).
         fechaHora = self._nuevaFechaHora()
         idGasto = self.ventaDAO.registrarGasto(
-            idSesion, nombre, montoFirmado, descripcion, fechaHora, cajaNueva
+            idSesion, nombre, montoFirmado, descripcion, fechaHora,
+            cajaNueva, idCaja
         )
         return GastoSecundario(
             idGasto=idGasto,

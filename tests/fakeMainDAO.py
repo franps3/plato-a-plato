@@ -25,6 +25,10 @@ class FakeBD:
         self._proximoIdVenta = 1
         self.gastos = {}     # idGasto -> [id, idSesion, nombre, monto, descripcion, fechaHora]
         self._proximoIdGasto = 1
+        self.cajas = {}      # idCaja -> [id, idSesion, nombre, fondo_inicial, monto] (MJ1)
+        self._proximoIdCaja = 1
+        self.combos = set()  # IDs de producto que son combos (Es_combo=1) (MJ4)
+        self.detalleCombo = {}  # idCombo -> [[idProducto, cantidad], ...] (MJ4)
 
 
 class FakeMainDAO:
@@ -33,16 +37,45 @@ class FakeMainDAO:
     def __init__(self, bd=None):
         self._bd = bd if bd is not None else FakeBD()
 
-    def crearSesion(self, passHash, fondoInicial, caja, fechaInicio) -> int:
-        """Persiste (sobreescribe) la sesión simulada y devuelve su ID."""
+    def crearSesion(self, passHash, fondoInicial, caja, fechaInicio,
+                    cajas=None) -> int:
+        """Persiste (sobreescribe) la sesión simulada y devuelve su ID.
+
+        MJ1: si se pasa cajas (lista de (nombre, monto)) se crean esas cajas;
+        si no, se crea la "Caja principal" con el fondo inicial.
+        """
         idSesion = self._bd._proximoIdSesion
         self._bd._proximoIdSesion += 1
         self._bd.sesion = (idSesion, fechaInicio, fondoInicial, caja, passHash)
+        cajasCrear = cajas if cajas else [("Caja principal", caja)]
+        for nombreCaja, montoCaja in cajasCrear:
+            idCaja = self._bd._proximoIdCaja
+            self._bd._proximoIdCaja += 1
+            self._bd.cajas[idCaja] = [
+                idCaja, idSesion, nombreCaja, float(montoCaja), float(montoCaja)
+            ]
         return idSesion
 
     def obtenerSesion(self):
         """Devuelve la tupla de la sesión simulada o None si no existe."""
         return self._bd.sesion
+
+    def verCajas(self, idSesion):
+        """Devuelve las cajas de la sesión: list[(ID_caja, Nombre, Fondo_inicial, Monto)]. (MJ1)"""
+        return [
+            (c[0], c[2], c[3], c[4])
+            for c in self._bd.cajas.values()
+            if c[1] == idSesion
+        ]
+
+    def verTotalCajas(self, idSesion):
+        """Devuelve la suma de los Monto de todas las cajas de la sesión. (MJ1/MJ7)"""
+        return float(sum(c[4] for c in self._bd.cajas.values() if c[1] == idSesion))
+
+    def obtenerCaja(self, idCaja):
+        """Devuelve una caja por su ID o None si no existe. (MJ1)"""
+        c = self._bd.cajas.get(idCaja)
+        return tuple(c) if c is not None else None
 
     def nuke(self):
         """Borra la sesión, productos, ventas y gastos (CU15 reiniciar)."""
@@ -54,6 +87,10 @@ class FakeMainDAO:
         self._bd._proximoIdVenta = 1
         self._bd.gastos = {}
         self._bd._proximoIdGasto = 1
+        self._bd.cajas = {}
+        self._bd._proximoIdCaja = 1
+        self._bd.combos = set()
+        self._bd.detalleCombo = {}
 
     def exportar(self, tipo, rutaDestino) -> str:
         """Falso: simula la exportación generando un archivo vacío (CU13/CU16).
@@ -124,6 +161,58 @@ class FakeProdDAO:
             return 0
         del self._bd.productos[idProducto]
         return 1
+    # MJ4: combos (falso)
+    def crearCombo(self, idSesion, nombre, precio, componentes) -> int:
+        """Persiste un combo (Producto Es_combo=1) + DetalleCombo. Devuelve ID_combo."""
+        for idProducto, cantidad in componentes:
+            if idProducto not in self._bd.productos:
+                raise PersistenceError(
+                    f"El componente {idProducto} no existe; se deshace el combo."
+                )
+        idCombo = self._bd._proximoIdProducto
+        self._bd._proximoIdProducto += 1
+        self._bd.productos[idCombo] = [
+            idCombo, idSesion, nombre, float(precio), 0
+        ]
+        self._bd.combos.add(idCombo)
+        self._bd.detalleCombo[idCombo] = [[idProd, cant] for idProd, cant in componentes]
+        return idCombo
+
+    def verCombos(self, idSesion):
+        """Lista combos de la sesión: list[(ID_combo, Nombre, Precio)]."""
+        return [
+            (p[0], p[2], p[3])
+            for p in self._bd.productos.values()
+            if p[1] == idSesion and p[0] in self._bd.combos
+        ]
+
+    def verComponentesCombo(self, idCombo):
+        """Devuelve componentes: list[(ID_producto, Cantidad)]."""
+        return [tuple(c) for c in self._bd.detalleCombo.get(idCombo, [])]
+
+    def editarCombo(self, idCombo, nombre, precio, componentes):
+        """Actualiza nombre, precio y componentes. Devuelve (id, nombre, precio) o None."""
+        if idCombo not in self._bd.combos:
+            return None
+        for idProducto, cantidad in componentes:
+            if idProducto not in self._bd.productos:
+                raise PersistenceError(
+                    f"El componente {idProducto} no existe; se deshace la edición."
+                )
+        p = self._bd.productos[idCombo]
+        p[2] = nombre
+        p[3] = float(precio)
+        self._bd.detalleCombo[idCombo] = [[idProd, cant] for idProd, cant in componentes]
+        return (idCombo, nombre, float(precio))
+
+    def eliminarCombo(self, idCombo) -> int:
+        """Elimina un combo y sus componentes. Devuelve 1 si era combo, 0 si no."""
+        if idCombo not in self._bd.combos:
+            return 0
+        del self._bd.productos[idCombo]
+        self._bd.combos.discard(idCombo)
+        self._bd.detalleCombo.pop(idCombo, None)
+        return 1
 
 
 class FakeStockDAO:
@@ -154,6 +243,7 @@ class FakeStockDAO:
         return p[4]
 
 
+
 class FakeVentaDAO:
     """Falso DAO de ventas, detalles, gastos y caja.
 
@@ -173,9 +263,23 @@ class FakeVentaDAO:
         idSesion, fechaInicio, fondoInicial, caja, passHash = self._bd.sesion
         self._bd.sesion = (idSesion, fechaInicio, fondoInicial, cajaNueva, passHash)
 
+    def _ajustarMontoCaja(self, idCaja, delta):
+        """Suma delta al Monto de una caja específica (MJ1). Retorna False si no existe."""
+        c = self._bd.cajas.get(idCaja)
+        if c is None:
+            return False
+        c[4] = round(c[4] + delta, 2)
+        return True
+
     def registrarVenta(self, idSesion, fechaHora, detalles, montoNeto,
-                       cajaNueva) -> int:
-        """Persiste venta + detalles + caja; devuelve ID_venta."""
+                       cajaNueva, idCaja=None) -> int:
+        """Persiste venta + detalles + caja; devuelve ID_venta.
+
+        MJ1: si idCaja es válido, se suma montoNeto al Monto de esa caja.
+        Si no existe, se eleva PersistenceError.
+        """
+        if idCaja is not None and not self._ajustarMontoCaja(idCaja, montoNeto):
+            raise PersistenceError(f"La caja {idCaja} no existe.")
         idVenta = self._bd._proximoIdVenta
         self._bd._proximoIdVenta += 1
         self._bd.ventas[idVenta] = [
@@ -185,8 +289,14 @@ class FakeVentaDAO:
         return idVenta
 
     def registrarGasto(self, idSesion, nombre, monto, descripcion,
-                       fechaHora, cajaNueva) -> int:
-        """Persiste gasto/reinserción + caja; devuelve ID_gasto."""
+                       fechaHora, cajaNueva, idCaja=None) -> int:
+        """Persiste gasto/reinserción + caja; devuelve ID_gasto.
+
+        MJ1: si idCaja es válido, se suma monto (firmado) al Monto de esa caja.
+        Si no existe, se eleva PersistenceError.
+        """
+        if idCaja is not None and not self._ajustarMontoCaja(idCaja, monto):
+            raise PersistenceError(f"La caja {idCaja} no existe.")
         idGasto = self._bd._proximoIdGasto
         self._bd._proximoIdGasto += 1
         self._bd.gastos[idGasto] = [

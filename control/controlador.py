@@ -18,6 +18,7 @@ from typing import Optional
 from .excepciones import (
     AppError,
     CarritoVacio,
+    CajaNoEncontrada,
     CredencialInvalida,
     FondoInvalido,
     MontoInvalido,
@@ -29,7 +30,7 @@ from .excepciones import (
     SesionYaExiste,
     StockInsuficiente,
 )
-from .modelos import DetalleVenta, Sesion
+from .modelos import Caja, DetalleVenta, Sesion
 from .servProd import ServProd
 from .servStock import ServStock
 from .servVenta import ServVenta
@@ -127,7 +128,7 @@ class Controlador:
     # Asigna contraseña y monto inicial; inicializa la sesión generando la
     # base de datos local (caja = fondo inicial, sesión única en bd).
     # ------------------------------------------------------------------
-    def crearSesion(self, password: str, fondoInicial) -> dict:
+    def crearSesion(self, password: str, fondoInicial, cajas=None) -> dict:
         """Crea la sesión única del sistema.
 
         Postcondición (docs/CUs.md y decisión de diseño):
@@ -147,7 +148,8 @@ class Controlador:
             fechaInicio = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             passHash = self.hashearPassword(password)
             idSesion = self.dao.crearSesion(
-                passHash, float(fondoInicial), float(fondoInicial), fechaInicio
+                passHash, float(fondoInicial), float(fondoInicial), fechaInicio,
+                cajas,
             )
 
             # Actualiza el estado de la sesión en el controlador.
@@ -222,6 +224,70 @@ class Controlador:
             "mensaje": "Sesión cerrada. Debe iniciar sesión nuevamente.",
             "datos": None,
         }
+
+    # ------------------------------------------------------------------
+    # MJ1/MJ7: cajas (medios de pago) y total de caja
+    # ------------------------------------------------------------------
+    def verCajas(self, idSesion) -> dict:
+        """Lista las cajas de la sesión (MJ1).
+
+        Retorno: {"ok": bool, "mensaje": str, "datos": [Caja, ...]}
+        """
+        try:
+            filas = self.dao.verCajas(idSesion)
+            cajas = [
+                Caja(
+                    idCaja=f[0], idSesion=idSesion, nombre=f[1],
+                    fondoInicial=float(f[2]), monto=float(f[3]),
+                )
+                for f in filas
+            ]
+            return {
+                "ok": True,
+                "mensaje": "Cajas de la sesión obtenidas.",
+                "datos": cajas,
+            }
+        except AppError as err:
+            log.error("%s: %s", type(err).__name__, err, exc_info=True)
+            return {"ok": False, "mensaje": str(err), "datos": None}
+
+    def verTotalCajas(self, idSesion) -> dict:
+        """Devuelve el total de caja (suma de los Monto de todas las cajas) (MJ1/MJ7).
+
+        Retorno: {"ok": bool, "mensaje": str, "datos": float}
+        """
+        try:
+            total = self.dao.verTotalCajas(idSesion)
+            return {
+                "ok": True,
+                "mensaje": "Total de caja calculado.",
+                "datos": total,
+            }
+        except AppError as err:
+            log.error("%s: %s", type(err).__name__, err, exc_info=True)
+            return {"ok": False, "mensaje": str(err), "datos": None}
+
+    def obtenerCaja(self, idCaja) -> dict:
+        """Devuelve una caja por su ID (MJ1).
+
+        Retorno: {"ok": bool, "mensaje": str, "datos": Caja|None}
+        """
+        try:
+            fila = self.dao.obtenerCaja(idCaja)
+            if fila is None:
+                raise CajaNoEncontrada(f"No existe la caja con ID {idCaja}.")
+            caja = Caja(
+                idCaja=fila[0], idSesion=fila[1], nombre=fila[2],
+                fondoInicial=float(fila[3]), monto=float(fila[4]),
+            )
+            return {
+                "ok": True,
+                "mensaje": "Caja obtenida.",
+                "datos": caja,
+            }
+        except AppError as err:
+            log.error("%s: %s", type(err).__name__, err, exc_info=True)
+            return {"ok": False, "mensaje": str(err), "datos": None}
 
     # ------------------------------------------------------------------
     # Auxiliar de estado para las vistas.
@@ -377,6 +443,98 @@ class Controlador:
         except AppError as err:
             log.error("%s: %s", type(err).__name__, err, exc_info=True)
             return {"ok": False, "mensaje": str(err), "datos": None}
+
+    # ------------------------------------------------------------------
+    # MJ4: combos (delegan en servProd / prodDAO)
+    # ------------------------------------------------------------------
+    def crearCombo(self, nombre, precio, componentes) -> dict:
+        """Crea un combo y sus componentes (MJ4).
+
+        Retorno: {"ok": bool, "mensaje": str, "datos": int|None}
+        """
+        try:
+            idCombo = self.servProd.crearCombo(
+                self.sesionActiva.idSesion, nombre, precio, componentes
+            )
+            return {
+                "ok": True,
+                "mensaje": "Combo creado correctamente.",
+                "datos": idCombo,
+            }
+        except (AppError, ValueError) as err:
+            log.error("%s: %s", type(err).__name__, err, exc_info=True)
+            return {"ok": False, "mensaje": str(err), "datos": None}
+
+    def verCombos(self) -> dict:
+        """Lista los combos de la sesión (MJ4).
+
+        Retorno: {"ok": bool, "mensaje": str, "datos": [(id, nombre, precio), ...]}
+        """
+        try:
+            combos = self.servProd.verCombos(self.sesionActiva.idSesion)
+            return {
+                "ok": True,
+                "mensaje": "Combos obtenidos.",
+                "datos": combos,
+            }
+        except AppError as err:
+            log.error("%s: %s", type(err).__name__, err, exc_info=True)
+            return {"ok": False, "mensaje": str(err), "datos": None}
+
+    def verComponentesCombo(self, idCombo) -> dict:
+        """Devuelve los componentes de un combo (MJ4).
+
+        Retorno: {"ok": bool, "mensaje": str, "datos": [(idProducto, cantidad), ...]}
+        """
+        try:
+            componentes = self.servProd.verComponentesCombo(idCombo)
+            return {
+                "ok": True,
+                "mensaje": "Componentes del combo obtenidos.",
+                "datos": componentes,
+            }
+        except AppError as err:
+            log.error("%s: %s", type(err).__name__, err, exc_info=True)
+            return {"ok": False, "mensaje": str(err), "datos": None}
+
+    def editarCombo(self, idCombo, nombre, precio, componentes) -> dict:
+        """Actualiza nombre, precio y componentes de un combo (MJ4).
+
+        Retorno: {"ok": bool, "mensaje": str, "datos": tuple|None}
+        """
+        try:
+            resultado = self.servProd.editarCombo(
+                idCombo, nombre, precio, componentes
+            )
+            if resultado is None:
+                raise ProductoNoEncontrado("No se encontró el combo a editar.")
+            return {
+                "ok": True,
+                "mensaje": "Combo modificado correctamente.",
+                "datos": resultado,
+            }
+        except (AppError, ValueError) as err:
+            log.error("%s: %s", type(err).__name__, err, exc_info=True)
+            return {"ok": False, "mensaje": str(err), "datos": None}
+
+    def eliminarCombo(self, idCombo) -> dict:
+        """Elimina un combo y sus componentes (MJ4).
+
+        Retorno: {"ok": bool, "mensaje": str, "datos": int|None}
+        """
+        try:
+            filas = self.servProd.eliminarCombo(idCombo)
+            if filas == 0:
+                raise ProductoNoEncontrado("No se encontró el combo a eliminar.")
+            return {
+                "ok": True,
+                "mensaje": "Combo eliminado correctamente.",
+                "datos": filas,
+            }
+        except AppError as err:
+            log.error("%s: %s", type(err).__name__, err, exc_info=True)
+            return {"ok": False, "mensaje": str(err), "datos": None}
+
 # ------------------------------------------------------------------
     # Utilidad de validación de montos (CU11)
     # ------------------------------------------------------------------
@@ -446,7 +604,7 @@ class Controlador:
     # suma el total a caja y vacía el carrito. La caja nueva se persiste
     # en ventaDAO dentro de la misma transacción que la venta.
     # ------------------------------------------------------------------
-    def confirmarVenta(self) -> dict:
+    def confirmarVenta(self, idCaja=None) -> dict:
         """Registra la venta multiproducto del carrito actual (CU10).
 
         El controlador arma los detalles con el precio actual (servProd),
@@ -488,7 +646,7 @@ class Controlador:
 
             # Registra venta + detalles + caja en la misma transacción.
             venta = self.servVenta.registrarVenta(
-                idSesion, detalles, cajaNueva
+                idSesion, detalles, cajaNueva, idCaja
             )
 
             # Descuenta el stock de cada ítem (validación ya hecha).
@@ -513,7 +671,7 @@ class Controlador:
     # positivo = reinserción); el tipo sale del signo en el historial.
     # NO se permite dejar la caja en negativo con un gasto.
     # ------------------------------------------------------------------
-    def gasto(self, nombre, desc, monto) -> dict:
+    def gasto(self, nombre, desc, monto, idCaja=None) -> dict:
         """Registra un egreso y descuenta el valor de caja (CU11).
 
         Retorno: {"ok": bool, "mensaje": str, "datos": GastoSecundario|None}
@@ -527,7 +685,7 @@ class Controlador:
             cajaNueva = round(self.sesionActiva.caja - montoValido, 2)
             gasto = self.servVenta.registrarGasto(
                 self.sesionActiva.idSesion, nombre, montoValido, desc,
-                cajaNueva,
+                cajaNueva, idCaja,
             )
             self.sesionActiva.caja = cajaNueva
             return {
@@ -539,7 +697,7 @@ class Controlador:
             log.error("%s: %s", type(err).__name__, err, exc_info=True)
             return {"ok": False, "mensaje": str(err), "datos": None}
 
-    def reinsertar(self, nombre, desc, monto) -> dict:
+    def reinsertar(self, nombre, desc, monto, idCaja=None) -> dict:
         """Registra una reinserción de dinero y suma a caja (CU11).
 
         Retorno: {"ok": bool, "mensaje": str, "datos": GastoSecundario|None}
@@ -549,7 +707,7 @@ class Controlador:
             cajaNueva = round(self.sesionActiva.caja + montoValido, 2)
             gasto = self.servVenta.registrarReinsercion(
                 self.sesionActiva.idSesion, nombre, montoValido, desc,
-                cajaNueva,
+                cajaNueva, idCaja,
             )
             self.sesionActiva.caja = cajaNueva
             return {

@@ -88,3 +88,21 @@ class GastoSecundario:
     monto: float
     descripcion: str
     fechaHora: str
+
+
+@dataclass
+class Caja:
+    """Caja (medio de pago) de una sesión (MJ1).
+
+    Atributos:
+        idCaja: Identificador único de la caja.
+        idSesion: Sesión a la que pertenece la caja.
+        nombre: Nombre de la caja (ej. "Efectivo", "Mercado Pago").
+        fondoInicial: Monto con el que se abrió la caja.
+        monto: Monto actual de la caja (se modifica con cada venta/gasto asignada).
+    """
+    idCaja: int
+    idSesion: int
+    nombre: str
+    fondoInicial: float
+    monto: float
