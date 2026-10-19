@@ -1,3 +1,9 @@
+[2026-10-18] Agente 2 (Vista)
+- MJ1 (múltiples cajas): el formulario de creación de sesión (login.py) permite cargar cajas/medios de pago (popup nombre + monto, chips con botón quitar y validación de suma == fondo inicial); la pantalla de Venta agrega un selector de caja en el popup de confirmar venta y en el de registrar gasto, para asignar el monto de la operación a esa caja.
+- MJ4 (combos): Configuración de Productos gana el selector Productos/Combos; alta, modificación (nombre, precio, componentes con cantidad y stock inicial) y baja de combos desde la UI; los combos se venden como un producto más en la pantalla de Venta.
+- MJ7 (valor de caja en UI): total de caja (suma de subcajas, verTotalCajas) arriba a la derecha de la pantalla de Venta, actualizado en vivo con ventas y gastos; Configuración de Sesión muestra el valor actual de cada caja (verCajas).
+- MJ8 (detalles de venta en UI): en el listado de Venta cada producto muestra la cantidad y el subtotal agregados al carrito (xN · $subtotal), refrescado en vivo.
+- Verificación: compilación OK, import de vistas OK y suite completa 140/140 tests en verde (sin regresiones).
 - MJ1 (cajas/medios de pago): crearSesion(password, fondoInicial, cajas=None) reenvía cajas a mainDAO; verCajas(idSesion), verTotalCajas(idSesion), obtenerCaja(idCaja) listan/suman/obtienen cajas de la sesión; confirmarVenta/gasto/reinsertar aceptan idCaja opcional y lo reenvían a ventaDAO; CajaNoEncontrada para caja inexistente.
 - MJ4 (combos): crearCombo/verCombos/verComponentesCombo/editarCombo/eliminarCombo en el controlador delegan en servProd/prodDAO (validan nombre, precio y componentes).
 - MJ7 (total de caja): verTotalCajas disponible para mostrar el total de caja en la UI de Venta.

@@ -117,6 +117,14 @@ class VistaVenta(ctk.CTkFrame):
         )
         self.botonCarrito.pack(side="left", padx=(10, 0))
 
+        # Total de caja visible (MJ7): suma de todas las cajas de la sesión.
+        self.lblCajaTotal = ctk.CTkLabel(
+            barraSup, text="Caja total: $0", font=estilos.F_BOLD,
+            fg_color=estilos.BADGE_STOCK, text_color=estilos.TEXTO_CLARO,
+            corner_radius=estilos.RADIO_PILL, width=150,
+        )
+        self.lblCajaTotal.pack(side="left", padx=(10, 0))
+
         # --- Panel de lista de productos (con scroll) ---
         self.panel = ctk.CTkScrollableFrame(
             self, fg_color=estilos.FONDO_PANEL, corner_radius=estilos.RADIO,
@@ -142,6 +150,20 @@ class VistaVenta(ctk.CTkFrame):
             self.productos = []
             self._alerta(resultado["mensaje"])
         self._renderProductos()
+        # MJ7: mantiene el total de caja al día (ventas y gastos lo modifican).
+        self._refrescarCaja()
+
+    def _refrescarCaja(self):
+        """Actualiza el total de caja visible (MJ7, verTotalCajas)."""
+        sesion = self.controlador.sesionActiva
+        if sesion is None:
+            self.lblCajaTotal.configure(text="Caja total: $0")
+            return
+        resultado = self.controlador.verTotalCajas(sesion.idSesion)
+        if resultado["ok"]:
+            self.lblCajaTotal.configure(
+                text="Caja total: " + _formatoMonto(resultado["datos"])
+            )
 
     def _renderProductos(self):
         """Dibuja en el panel las filas de los productos que pasan el filtro."""
@@ -175,6 +197,16 @@ class VistaVenta(ctk.CTkFrame):
             fg_color=estilos.BADGE_STOCK, text_color=estilos.TEXTO_CLARO,
             corner_radius=8, width=42,
         ).pack(side="left", padx=6)
+
+        # Cantidad y subtotal en el carrito (MJ8).
+        cantidadCarrito = self.controlador.carrito.get(producto.idProducto, 0)
+        if cantidadCarrito:
+            subtotal = round(cantidadCarrito * producto.precio, 2)
+            ctk.CTkLabel(
+                fila, text=f"x{cantidadCarrito} · {_formatoMonto(subtotal)}",
+                font=estilos.F_PEQUENA, fg_color=estilos.BADGE_STOCK,
+                text_color=estilos.TEXTO_CLARO, corner_radius=8,
+            ).pack(side="left", padx=6)
 
         # Pastilla blanca con el precio.
         ctk.CTkLabel(
@@ -257,6 +289,32 @@ class VistaVenta(ctk.CTkFrame):
             text_color=estilos.TEXTO_CLARO,
         )
         self.lblTotal.pack(pady=12)
+
+        # Asignar la caja de la venta (MJ1): el monto se suma a esa caja.
+        self.cajasVenta = self._obtenerCajas()
+        if self.cajasVenta:
+            filaCaja = ctk.CTkFrame(
+                self.popupCarrito, fg_color=estilos.FONDO_PANEL,
+                corner_radius=estilos.RADIO,
+            )
+            filaCaja.pack(fill="x", padx=16, pady=8)
+            ctk.CTkLabel(
+                filaCaja, text="Caja", font=estilos.F_BOLD,
+                text_color=estilos.TEXTO_CLARO, anchor="w",
+            ).pack(side="left", padx=(14, 8), pady=10)
+            nombresCajas = [c.nombre for c in self.cajasVenta]
+            self.selectorCaja = ctk.CTkOptionMenu(
+                filaCaja, values=nombresCajas, font=estilos.F_NORMAL,
+                fg_color=estilos.BOTON_BARRA,
+                button_color=estilos.BOTON_BARRA_ACTIVO,
+                button_hover_color=estilos.BOTON_BARRA_HOVER,
+                dropdown_fg_color=estilos.FONDO_PANEL,
+                dropdown_hover_color=estilos.BOTON_BARRA_HOVER,
+                dropdown_text_color=estilos.TEXTO_CLARO,
+                text_color=estilos.TEXTO_CLARO, width=220,
+            )
+            self.selectorCaja.set(nombresCajas[0])
+            self.selectorCaja.pack(side="right", padx=(8, 14), pady=6)
 
         # Botones Confirmar / Cancelar.
         acciones = ctk.CTkFrame(self.popupCarrito, fg_color="transparent")
@@ -382,8 +440,9 @@ class VistaVenta(ctk.CTkFrame):
     # Carrito: confirmar / cancelar
     # ------------------------------------------------------------------
     def _confirmarVenta(self):
-        """Confirma la venta (CU10), cierra el popup y refresca el catálogo."""
-        resultado = self.controlador.confirmarVenta()
+        """Confirma la venta (CU10) en la caja elegida (MJ1), cierra el
+        popup y refresca el catálogo."""
+        resultado = self.controlador.confirmarVenta(self._cajaSeleccionada())
         if resultado["ok"]:
             self._cerrarCarrito()
             self.refrescarProductos()
@@ -469,7 +528,27 @@ class VistaVenta(ctk.CTkFrame):
         self.gastoMonto.pack(fill="x", padx=20, pady=(4, 0))
         self.gastoMonto.bind("<Return>", lambda _e: self._registrarGasto())
 
-        # Botones Registrar / Cancelar.
+        # Asignar la caja del gasto (MJ1): el egreso se descuenta de esa caja.
+        self._gastoCajas = self._obtenerCajas()
+        if self._gastoCajas:
+            ctk.CTkLabel(
+                formulario, text="Caja", font=estilos.F_BOLD,
+                text_color=estilos.TEXTO_CLARO, anchor="w",
+            ).pack(fill="x", padx=20, pady=(10, 0))
+            self.gastoSelectorCaja = ctk.CTkOptionMenu(
+                formulario,
+                values=[c.nombre for c in self._gastoCajas],
+                font=estilos.F_NORMAL,
+                fg_color=estilos.BOTON_BARRA,
+                button_color=estilos.BOTON_BARRA_ACTIVO,
+                button_hover_color=estilos.BOTON_BARRA_HOVER,
+                dropdown_fg_color=estilos.FONDO_PANEL,
+                dropdown_hover_color=estilos.BOTON_BARRA_HOVER,
+                dropdown_text_color=estilos.TEXTO_CLARO,
+                text_color=estilos.TEXTO_CLARO,
+            )
+            self.gastoSelectorCaja.set(self._gastoCajas[0].nombre)
+            self.gastoSelectorCaja.pack(fill="x", padx=20, pady=(4, 0))
         acciones = ctk.CTkFrame(self.popupGasto, fg_color="transparent")
         acciones.pack(fill="x", padx=16, pady=(0, 16))
         ctk.CTkButton(
@@ -501,12 +580,48 @@ class VistaVenta(ctk.CTkFrame):
             self._alerta("El monto debe ser un número válido.")
             return
 
-        resultado = self.controlador.gasto(nombre, descripcion, monto)
+        resultado = self.controlador.gasto(
+            nombre, descripcion, monto, self._gastoCajaSeleccionada()
+        )
         if resultado["ok"]:
             self._cerrarGasto()
+            self._refrescarCaja()
             self._informar(resultado["mensaje"])
         else:
             self._alerta(resultado["mensaje"])
+
+    # ------------------------------------------------------------------
+    # Cajas (MJ1/MJ7): utilidades compartidas por carrito y gasto
+    # ------------------------------------------------------------------
+    def _obtenerCajas(self):
+        """Devuelve las cajas de la sesión activa (MJ1/MJ7)."""
+        sesion = self.controlador.sesionActiva
+        if sesion is None:
+            return []
+        resultado = self.controlador.verCajas(sesion.idSesion)
+        if resultado["ok"]:
+            return resultado["datos"] or []
+        return []
+
+    def _cajaSeleccionada(self):
+        """Devuelve el idCaja del selector del carrito (o None)."""
+        selector = getattr(self, "selectorCaja", None)
+        if selector is None:
+            return None
+        for caja in self.cajasVenta:
+            if caja.nombre == selector.get():
+                return caja.idCaja
+        return None
+
+    def _gastoCajaSeleccionada(self):
+        """Devuelve el idCaja del selector del gasto (o None)."""
+        selector = getattr(self, "gastoSelectorCaja", None)
+        if selector is None:
+            return None
+        for caja in self._gastoCajas:
+            if caja.nombre == selector.get():
+                return caja.idCaja
+        return None
 
     def _cerrarGasto(self):
         """Cierra el popup de gasto dejando la caja y el carrito intactos."""

@@ -49,10 +49,15 @@ class VistaConfigProductos(ctk.CTkFrame):
         super().__init__(master, fg_color=estilos.FONDO)
         self.controlador = controlador
         self.productos = []          # lista de Producto vigente
+        self.combos = []             # lista de (idCombo, nombre, precio) (MJ4)
+        self._mapaProductos = {}     # idProducto -> Producto (MJ4)
+        self.modo = "productos"      # "productos" | "combos" (MJ4)
         self.filtro = ""             # texto de búsqueda actual
         self.popupAlta = None        # CTkToplevel "Añadir Producto"
         self.popupModificar = None   # CTkToplevel "Modificar Producto"
         self.popupEliminar = None    # CTkToplevel "Eliminar Producto"
+        self.popupCombo = None       # CTkToplevel "Añadir/Modificar Combo" (MJ4)
+        self.comboEditando = None    # tupla (id, nombre, precio) o None (MJ4)
         self.productoSeleccionado = None
         self._cargarIconos()
         self._construir()
@@ -113,7 +118,21 @@ class VistaConfigProductos(ctk.CTkFrame):
         )
         self.botonAgregar.pack(side="left", padx=(10, 0))
 
-        # --- Panel de lista de productos (con scroll) ---
+        # Selector Productos / Combos (MJ4): cambia el modo de la pantalla.
+        self.selectorModo = ctk.CTkSegmentedButton(
+            barraSup, values=["Productos", "Combos"],
+            font=estilos.F_NORMAL,
+            fg_color=estilos.FONDO,
+            selected_color=estilos.BOTON_BARRA_ACTIVO,
+            selected_hover_color=estilos.BOTON_BARRA_HOVER,
+            unselected_color=estilos.BOTON_BARRA,
+            unselected_hover_color=estilos.BOTON_BARRA_HOVER,
+            command=self._cambiarModo,
+        )
+        self.selectorModo.set("Productos")
+        self.selectorModo.pack(side="left", padx=(10, 0))
+
+        # --- Panel de lista (con scroll): productos o combos según modo ---
         self.panel = ctk.CTkScrollableFrame(
             self, fg_color=estilos.FONDO_PANEL, corner_radius=estilos.RADIO,
             scrollbar_button_color=estilos.SCROLL,
@@ -184,24 +203,138 @@ class VistaConfigProductos(ctk.CTkFrame):
         ).pack(side="left", padx=(6, 12))
 
     # ------------------------------------------------------------------
+    # Combos (MJ4)
+    # ------------------------------------------------------------------
+    def _cambiarModo(self, valor):
+        """Alterna la pantalla entre Productos y Combos (MJ4)."""
+        self.modo = "combos" if valor == "Combos" else "productos"
+        self.entradaBusqueda.delete(0, "end")
+        self.filtro = ""
+        if self.modo == "combos":
+            self.botonAgregar.configure(command=self._abrirAltaCombo)
+            self.refrescarCombos()
+        else:
+            self.botonAgregar.configure(command=self._abrirAlta)
+            self.refrescarProductos()
+
+    def refrescarCombos(self):
+        """Consulta los combos al controlador y vuelve a renderizar (MJ4)."""
+        resultado = self.controlador.verCombos()
+        if resultado["ok"]:
+            self.combos = resultado["datos"] or []
+        else:
+            self.combos = []
+            self._alerta(resultado["mensaje"])
+
+        # Mapa idProducto -> Producto para resolver nombres de componentes.
+        self._mapaProductos = {}
+        resProductos = self.controlador.verProductos()
+        if resProductos["ok"]:
+            self._mapaProductos = {
+                p.idProducto: p for p in resProductos["datos"] or []
+            }
+        self._renderCombos()
+
+    def _renderCombos(self):
+        """Dibuja en el panel las filas de los combos que pasan el filtro."""
+        for widget in self.panel.winfo_children():
+            widget.destroy()
+
+        texto = self.filtro.strip().lower()
+        for combo in self.combos:
+            if texto and texto not in combo[1].lower():
+                continue
+            self._crearFilaCombo(combo)
+
+        if not self.combos:
+            ctk.CTkLabel(
+                self.panel,
+                text="Aún no hay combos. Usá el botón \"+\" para crear uno.",
+                font=estilos.F_NORMAL, text_color=estilos.TEXTO_TENUE,
+            ).pack(pady=18)
+
+    def _crearFilaCombo(self, combo):
+        """Crea la tarjeta de un combo: nombre, componentes, stock y precio."""
+        idCombo, nombre, precio = combo
+
+        # Texto de componentes con nombres resueltos (MJ4).
+        partes = []
+        resultado = self.controlador.verComponentesCombo(idCombo)
+        for idProducto, cantidad in (resultado["datos"] or []):
+            producto = self._mapaProductos.get(idProducto)
+            nombreProducto = producto.nombre if producto else "Producto"
+            partes.append(f"{nombreProducto} x{cantidad}")
+        textoComponentes = "  ·  ".join(partes) or "Sin componentes"
+
+        # Stock del combo (el combo es un Producto con Es_combo=1).
+        stock = 0
+        producto = self._mapaProductos.get(idCombo)
+        if producto is not None:
+            stock = producto.stock
+
+        fila = ctk.CTkFrame(
+            self.panel, fg_color=estilos.FILA,
+            corner_radius=estilos.RADIO, height=46,
+        )
+        fila.pack(fill="x", padx=8, pady=4)
+        fila.pack_propagate(False)
+
+        ctk.CTkLabel(
+            fila, text=nombre, font=estilos.F_BOLD,
+            text_color=estilos.TEXTO_CLARO, anchor="w",
+        ).pack(side="left", fill="x", expand=True, padx=(14, 6))
+
+        ctk.CTkLabel(
+            fila, text=textoComponentes, font=estilos.F_PEQUENA,
+            text_color=estilos.TEXTO_TENUE, anchor="w",
+        ).pack(side="left", fill="x", expand=True, padx=4)
+
+        # Recuadro con el stock del combo.
+        ctk.CTkLabel(
+            fila, text=str(stock), font=estilos.F_BOLD,
+            fg_color=estilos.BADGE_STOCK, text_color=estilos.TEXTO_CLARO,
+            corner_radius=8, width=42,
+        ).pack(side="left", padx=6)
+
+        ctk.CTkLabel(
+            fila, text=_formatoMonto(precio), font=estilos.F_PRECIO,
+            fg_color=estilos.PILL, text_color=estilos.TEXTO_OSCURO,
+            corner_radius=estilos.RADIO_PILL, width=96,
+        ).pack(side="left", padx=6)
+
+        # Botón de configuración (abre el popup de modificación/eliminación).
+        ctk.CTkButton(
+            fila, text="", image=self.iconos["configuracion"],
+            width=32, height=32,
+            fg_color=estilos.BOTON_CLARO, hover_color=estilos.BOTON_CLARO_HOVER,
+            corner_radius=8,
+            command=lambda c=combo: self._abrirModificarCombo(c),
+        ).pack(side="left", padx=(6, 12))
+
+    # ------------------------------------------------------------------
     # Búsqueda local (filtro sin controlador)
     # ------------------------------------------------------------------
     def _alCambiarBusqueda(self, _evento=None):
         """Filtra la lista localmente ante cada pulsación en la búsqueda."""
         self.filtro = self.entradaBusqueda.get()
-        self._renderProductos()
+        if self.modo == "combos":
+            self._renderCombos()
+        else:
+            self._renderProductos()
 
     # ------------------------------------------------------------------
     # Gestión de popups (sólo uno abierto a la vez)
     # ------------------------------------------------------------------
     def _cerrarPopups(self):
         """Cierra los popups abiertos de la vista, si los hay."""
-        for popup in (self.popupAlta, self.popupModificar, self.popupEliminar):
+        for popup in (self.popupAlta, self.popupModificar, self.popupEliminar,
+                  self.popupCombo):
             if popup is not None and popup.winfo_exists():
                 popup.destroy()
         self.popupAlta = None
         self.popupModificar = None
         self.popupEliminar = None
+        self.popupCombo = None
 
 # ------------------------------------------------------------------
     # Popup Añadir Producto (CU4)
@@ -517,7 +650,259 @@ class VistaConfigProductos(ctk.CTkFrame):
         self._cerrarPopups()
 
 # ------------------------------------------------------------------
-    # Conversión de entradas (mismas convenciones que login.py)
+    # Popup Añadir / Modificar Combo (MJ4)
+    # ------------------------------------------------------------------
+    def _abrirAltaCombo(self):
+        """Abre el popup para crear un combo (MJ4)."""
+        self._cerrarPopups()
+        self.comboEditando = None
+        self._crearPopupCombo(None)
+
+    def _abrirModificarCombo(self, combo):
+        """Abre el popup para modificar un combo existente (MJ4)."""
+        self._cerrarPopups()
+        self.comboEditando = combo
+        self._crearPopupCombo(combo)
+
+    def _crearPopupCombo(self, combo):
+        """Construye el popup de alta/modificación de combos (MJ4).
+
+        combo es None para alta; si viene, se precargan sus datos y
+        componentes (idCombo, nombre, precio).
+        """
+        editando = combo is not None
+        self.popupCombo = ctk.CTkToplevel(self)
+        self.popupCombo.title("Modificar Combo" if editando else "Añadir Combo")
+        self.popupCombo.configure(fg_color=estilos.FONDO)
+        self.popupCombo.geometry("560x520")
+        self.popupCombo.resizable(False, False)
+        self.popupCombo.transient(self.winfo_toplevel())
+        self.popupCombo.grab_set()
+
+        tarjeta = ctk.CTkFrame(
+            self.popupCombo, fg_color=estilos.FONDO_PANEL,
+            corner_radius=estilos.RADIO,
+        )
+        tarjeta.pack(fill="both", expand=True, padx=16, pady=16)
+
+        ctk.CTkLabel(
+            tarjeta, text="Modificar Combo" if editando else "Añadir Combo",
+            font=estilos.F_SUBTITULO, text_color=estilos.TEXTO_CLARO,
+        ).pack(pady=(16, 4))
+        ctk.CTkLabel(
+            tarjeta, text="Combiná uno o más productos con su cantidad "
+                          "y asignale un precio.",
+            font=estilos.F_PEQUENA, text_color=estilos.TEXTO_TENUE,
+            wraplength=480, justify="center",
+        ).pack(pady=(0, 12))
+
+        # Nombre del combo.
+        ctk.CTkLabel(
+            tarjeta, text="Nombre", font=estilos.F_BOLD,
+            text_color=estilos.TEXTO_CLARO, anchor="w",
+        ).pack(fill="x", padx=20)
+        self.comboNombre = ctk.CTkEntry(
+            tarjeta, font=estilos.F_NORMAL, height=36,
+            fg_color=estilos.ENTRADA, text_color=estilos.ENTRADA_TEXTO,
+            corner_radius=estilos.RADIO,
+        )
+        self.comboNombre.pack(fill="x", padx=20, pady=(2, 8))
+
+        # Precio (y stock inicial sólo al crear).
+        filaPrecio = ctk.CTkFrame(tarjeta, fg_color="transparent")
+        filaPrecio.pack(fill="x", padx=20, pady=(0, 8))
+        marcoPrecio = ctk.CTkFrame(filaPrecio, fg_color="transparent")
+        marcoPrecio.pack(side="left", fill="x", expand=True, padx=(0, 6))
+        ctk.CTkLabel(
+            marcoPrecio, text="Precio", font=estilos.F_BOLD,
+            text_color=estilos.TEXTO_CLARO, anchor="w",
+        ).pack(fill="x")
+        self.comboPrecio = ctk.CTkEntry(
+            marcoPrecio, font=estilos.F_NORMAL, height=36,
+            fg_color=estilos.ENTRADA, text_color=estilos.ENTRADA_TEXTO,
+            corner_radius=estilos.RADIO, placeholder_text="Ej.: 2.500",
+        )
+        self.comboPrecio.pack(fill="x", pady=(2, 0))
+
+        self.comboStock = None
+        if not editando:
+            marcoStock = ctk.CTkFrame(filaPrecio, fg_color="transparent")
+            marcoStock.pack(side="left", fill="x", expand=True, padx=(6, 0))
+            ctk.CTkLabel(
+                marcoStock, text="Stock inicial", font=estilos.F_BOLD,
+                text_color=estilos.TEXTO_CLARO, anchor="w",
+            ).pack(fill="x")
+            self.comboStock = ctk.CTkEntry(
+                marcoStock, font=estilos.F_NORMAL, height=36,
+                fg_color=estilos.ENTRADA, text_color=estilos.ENTRADA_TEXTO,
+                corner_radius=estilos.RADIO, placeholder_text="Ej.: 20",
+            )
+            self.comboStock.pack(fill="x", pady=(2, 0))
+
+        # Componentes: lista de productos base con entrada de Cantidad.
+        ctk.CTkLabel(
+            tarjeta, text="Componentes (cantidad de cada producto)",
+            font=estilos.F_BOLD, text_color=estilos.TEXTO_CLARO, anchor="w",
+        ).pack(fill="x", padx=20, pady=(0, 4))
+
+        # Productos base = productos del catálogo que NO son combos (MJ4).
+        idsCombos = {c[0] for c in self.combos}
+        self._productosBase = [
+            p for p in self._mapaProductos.values()
+            if p.idProducto not in idsCombos
+        ]
+
+        # Cantidades actuales (al editar) para precargar.
+        cantidadesActuales = {}
+        if editando:
+            resultado = self.controlador.verComponentesCombo(combo[0])
+            for idProducto, cantidad in (resultado["datos"] or []):
+                cantidadesActuales[idProducto] = cantidad
+
+        contenedor = ctk.CTkScrollableFrame(
+            tarjeta, fg_color=estilos.FONDO, corner_radius=estilos.RADIO,
+            height=180,
+        )
+        contenedor.pack(fill="x", padx=20, pady=(0, 10))
+        self._entriesCantidad = {}
+        for producto in self._productosBase:
+            fila = ctk.CTkFrame(
+                contenedor, fg_color=estilos.FILA,
+                corner_radius=estilos.RADIO, height=38,
+            )
+            fila.pack(fill="x", padx=4, pady=2)
+            fila.pack_propagate(False)
+            ctk.CTkLabel(
+                fila, text=producto.nombre, font=estilos.F_NORMAL,
+                text_color=estilos.TEXTO_CLARO, anchor="w",
+            ).pack(side="left", fill="x", expand=True, padx=(12, 6))
+            entry = ctk.CTkEntry(
+                fila, width=64, font=estilos.F_NORMAL, height=30,
+                fg_color=estilos.ENTRADA, text_color=estilos.ENTRADA_TEXTO,
+                corner_radius=8, placeholder_text="0",
+            )
+            if producto.idProducto in cantidadesActuales:
+                entry.insert(0, str(cantidadesActuales[producto.idProducto]))
+            entry.pack(side="left", padx=(0, 12))
+            self._entriesCantidad[producto.idProducto] = entry
+
+        if not self._productosBase:
+            ctk.CTkLabel(
+                contenedor, text="No hay productos base disponibles.",
+                font=estilos.F_PEQUENA, text_color=estilos.TEXTO_TENUE,
+            ).pack(pady=12)
+
+        # Prellenar nombre y precio si es una modificación.
+        if editando:
+            self.comboNombre.insert(0, combo[1])
+            self.comboPrecio.insert(0, f"{combo[2]:g}")
+
+        # Botones Guardar / Cancelar (y Eliminar al modificar, MJ4).
+        acciones = ctk.CTkFrame(tarjeta, fg_color="transparent")
+        acciones.pack(fill="x", padx=20, pady=(0, 16))
+        if editando:
+            ctk.CTkButton(
+                acciones, text="Eliminar combo", font=estilos.F_BOLD,
+                height=40, fg_color=estilos.BOTON_BARRA,
+                hover_color=estilos.BOTON_BARRA_HOVER,
+                command=self._preguntarEliminarCombo,
+            ).pack(side="left", expand=True, fill="x", padx=(0, 8))
+        ctk.CTkButton(
+            acciones, text="Cancelar", font=estilos.F_BOLD, height=40,
+            fg_color=estilos.BOTON_BARRA,
+            hover_color=estilos.BOTON_BARRA_HOVER,
+            command=self._cerrarPopupCombo,
+        ).pack(side="left", expand=True, fill="x", padx=(0, 8))
+        ctk.CTkButton(
+            acciones, text="Guardar", font=estilos.F_BOLD, height=40,
+            fg_color=estilos.BOTON_BARRA_ACTIVO,
+            hover_color=estilos.BOTON_BARRA_HOVER,
+            command=self._confirmarCombo,
+        ).pack(side="left", expand=True, fill="x", padx=(8, 0))
+
+        self.comboNombre.focus_set()
+
+    def _confirmarCombo(self):
+        """Guarda el combo (alta o modificación, MJ4) con sus componentes."""
+        nombre = self.comboNombre.get().strip()
+        precio = self._parsearPrecio(self.comboPrecio.get())
+        stock = 0
+        if self.comboStock is not None:
+            stockParseado = self._parsearStock(self.comboStock.get())
+            stock = stockParseado if stockParseado is not None else 0
+
+        componentes = []
+        for idProducto, entry in self._entriesCantidad.items():
+            cantidad = self._parsearStock(entry.get()) or 0
+            if cantidad > 0:
+                componentes.append((idProducto, cantidad))
+
+        if not nombre:
+            self._alerta("El nombre del combo no puede ser vacío.")
+            return
+        if precio is None or precio < 0:
+            self._alerta("El precio del combo debe ser un número válido.")
+            return
+        if not componentes:
+            self._alerta(
+                "El combo debe incluir al menos un producto con cantidad > 0."
+            )
+            return
+        if self.comboStock is not None and stock < 0:
+            self._alerta("El stock inicial debe ser mayor o igual a cero.")
+            return
+
+        if self.comboEditando is None:
+            resultado = self.controlador.crearCombo(
+                nombre, precio, componentes
+            )
+            if resultado["ok"]:
+                idCombo = resultado["datos"]
+                # El combo es un Producto: se le asigna su stock inicial (MJ4).
+                if stock > 0:
+                    self.controlador.editarStock(idCombo, stock)
+                self._cerrarPopupCombo()
+                self.refrescarCombos()
+                self._informar("Combo creado correctamente.")
+            else:
+                self._alerta(resultado["mensaje"])
+        else:
+            idCombo = self.comboEditando[0]
+            resultado = self.controlador.editarCombo(
+                idCombo, nombre, precio, componentes
+            )
+            if resultado["ok"]:
+                self._cerrarPopupCombo()
+                self.refrescarCombos()
+                self._informar("Combo modificado correctamente.")
+            else:
+                self._alerta(resultado["mensaje"])
+
+    def _cerrarPopupCombo(self):
+        """Cierra el popup de combo, si está abierto."""
+        if self.popupCombo is not None and self.popupCombo.winfo_exists():
+            self.popupCombo.destroy()
+        self.popupCombo = None
+
+    def _preguntarEliminarCombo(self):
+        """Confirma la eliminación del combo con el usuario (MJ4)."""
+        pregunta = CTkMessagebox(
+            title="Eliminar Combo",
+            message="¿Seguro que deseas eliminar este combo? "
+                    "Esta acción no se puede deshacer.",
+            icon="question",
+            option_1="Sí",
+            option_2="No",
+        )
+        if pregunta.get() == "Sí":
+            idCombo = self.comboEditando[0]
+            self._cerrarPopupCombo()
+            resultado = self.controlador.eliminarCombo(idCombo)
+            if resultado["ok"]:
+                self.refrescarCombos()
+                self._informar("Combo eliminado correctamente.")
+            else:
+                self._alerta(resultado["mensaje"])
     # ------------------------------------------------------------------
     @staticmethod
     def _parsearPrecio(texto):

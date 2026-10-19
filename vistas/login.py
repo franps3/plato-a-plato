@@ -21,6 +21,14 @@ from CTkMessagebox import CTkMessagebox
 from . import estilos
 
 
+def _formatoMonto(valor):
+    """Formatea un monto sin decimales, con separador de miles '.'.
+
+    Ej.: 2500 -> '$2.500'; 11300 -> '$11.300'.
+    """
+    return "$" + f"{valor:,.0f}".replace(",", ".")
+
+
 class VistaLogin(ctk.CTkFrame):
     """Gestor de sesión: crea o inicia la sesión única del sistema."""
 
@@ -36,6 +44,9 @@ class VistaLogin(ctk.CTkFrame):
             self.modo = "ingresar"
         else:
             self.modo = "crear"
+        # MJ1: cajas (medios de pago) definidas al crear la sesión.
+        self.cajas = []          # list[(nombre, monto)]
+        self.popupCaja = None    # CTkToplevel "Nueva caja"
         self._construir()
 
     # ------------------------------------------------------------------
@@ -86,6 +97,32 @@ class VistaLogin(ctk.CTkFrame):
         )
         self.entradaFondo.pack(pady=(4, 0), fill="x")
 
+        # --- Cajas / medios de pago (MJ1): opcional, sólo al crear sesión ---
+        self.marcoCajas = ctk.CTkFrame(tarjeta, fg_color="transparent")
+        ctk.CTkLabel(
+            self.marcoCajas, text="Cajas / medios de pago (opcional)",
+            font=estilos.F_BOLD, text_color=estilos.TEXTO_CLARO, anchor="w",
+        ).pack(fill="x")
+        ctk.CTkLabel(
+            self.marcoCajas,
+            text="La suma de las cajas debe coincidir con el fondo "
+                 "inicial. Si no agregás cajas se usará la \"Caja "
+                 "principal\".",
+            font=estilos.F_PEQUENA, text_color=estilos.TEXTO_TENUE,
+            justify="left", anchor="w", wraplength=340,
+        ).pack(fill="x", pady=(0, 4))
+        self.contenedorCajas = ctk.CTkFrame(
+            self.marcoCajas, fg_color="transparent"
+        )
+        self.contenedorCajas.pack(fill="x", pady=(2, 6))
+        ctk.CTkButton(
+            self.marcoCajas, text="+ Agregar caja", font=estilos.F_BOLD,
+            height=36, fg_color=estilos.BOTON_CLARO,
+            hover_color=estilos.BOTON_CLARO_HOVER,
+            corner_radius=estilos.RADIO, command=self._abrirPopupCaja,
+        ).pack(fill="x")
+        self._renderCajas()
+
         # Botón principal de acción.
         textoBoton = "Crear sesión" if self.modo == "crear" else "Ingresar"
         self.botonAccion = ctk.CTkButton(
@@ -100,9 +137,12 @@ class VistaLogin(ctk.CTkFrame):
         self.entradaPass.bind("<Return>", lambda _e: self._accion())
         self.entradaFondo.bind("<Return>", lambda _e: self._accion())
 
-        # El campo de fondo inicial sólo aplica al crear sesión.
+        # El campo de fondo inicial y el marco de cajas sólo aplican al crear.
         if self.modo == "crear":
             self.marcoFondo.pack(
+                padx=40, pady=(0, 10), fill="x", before=self.botonAccion
+            )
+            self.marcoCajas.pack(
                 padx=40, pady=(0, 10), fill="x", before=self.botonAccion
             )
 
@@ -118,7 +158,13 @@ class VistaLogin(ctk.CTkFrame):
             if fondo is None:
                 self._alerta("El fondo inicial debe ser un número válido.")
                 return
-            resultado = self.controlador.crearSesion(password, fondo)
+            # MJ1: arma y valida las cajas definidas (suma == fondo inicial).
+            cajas = self._armarCajas(fondo)
+            if cajas is None:
+                return
+            resultado = self.controlador.crearSesion(
+                password, fondo, cajas or None
+            )
         else:
             resultado = self.controlador.iniciarSesion(password)
 
@@ -129,6 +175,145 @@ class VistaLogin(ctk.CTkFrame):
         else:
             self._alerta(resultado["mensaje"])
 
+    # ------------------------------------------------------------------
+    # Cajas / medios de pago (MJ1): creación de múltiples cajas
+    # ------------------------------------------------------------------
+    def _abrirPopupCaja(self):
+        """Abre el popup para cargar una caja (nombre + monto, MJ1)."""
+        if self.popupCaja is not None and self.popupCaja.winfo_exists():
+            return
+        self.popupCaja = ctk.CTkToplevel(self)
+        self.popupCaja.title("Nueva caja")
+        self.popupCaja.configure(fg_color=estilos.FONDO)
+        self.popupCaja.geometry("380x320")
+        self.popupCaja.resizable(False, False)
+        self.popupCaja.transient(self.winfo_toplevel())
+        self.popupCaja.grab_set()
+
+        tarjeta = ctk.CTkFrame(
+            self.popupCaja, fg_color=estilos.FONDO_PANEL,
+            corner_radius=estilos.RADIO,
+        )
+        tarjeta.pack(fill="both", expand=True, padx=16, pady=16)
+
+        ctk.CTkLabel(
+            tarjeta, text="Nueva caja", font=estilos.F_SUBTITULO,
+            text_color=estilos.TEXTO_CLARO,
+        ).pack(padx=24, pady=(16, 4))
+        ctk.CTkLabel(
+            tarjeta, text="Nombre y monto inicial de la caja "
+                          "(ej. Efectivo, Mercado Pago).",
+            font=estilos.F_PEQUENA, text_color=estilos.TEXTO_TENUE,
+            wraplength=320, justify="center",
+        ).pack(padx=24, pady=(0, 12))
+
+        self.nombreCajaEntry = ctk.CTkEntry(
+            tarjeta, font=estilos.F_NORMAL, height=38,
+            fg_color=estilos.ENTRADA, text_color=estilos.ENTRADA_TEXTO,
+            corner_radius=estilos.RADIO,
+            placeholder_text="Nombre (ej.: Efectivo)",
+        )
+        self.nombreCajaEntry.pack(padx=24, pady=(0, 8), fill="x")
+        self.montoCajaEntry = ctk.CTkEntry(
+            tarjeta, font=estilos.F_NORMAL, height=38,
+            fg_color=estilos.ENTRADA, text_color=estilos.ENTRADA_TEXTO,
+            corner_radius=estilos.RADIO,
+            placeholder_text="Monto inicial (ej.: 2000)",
+        )
+        self.montoCajaEntry.pack(padx=24, pady=(0, 14), fill="x")
+
+        acciones = ctk.CTkFrame(tarjeta, fg_color="transparent")
+        acciones.pack(fill="x", padx=24, pady=(0, 16))
+        ctk.CTkButton(
+            acciones, text="Cancelar", font=estilos.F_BOLD, height=40,
+            fg_color=estilos.BOTON_BARRA, hover_color=estilos.BOTON_BARRA_HOVER,
+            command=self._cerrarPopupCaja,
+        ).pack(side="left", expand=True, fill="x", padx=(0, 8))
+        ctk.CTkButton(
+            acciones, text="Agregar", font=estilos.F_BOLD, height=40,
+            fg_color=estilos.BOTON_BARRA_ACTIVO,
+            hover_color=estilos.BOTON_BARRA_HOVER,
+            command=self._confirmarPopupCaja,
+        ).pack(side="left", expand=True, fill="x", padx=(8, 0))
+
+        self.nombreCajaEntry.focus_set()
+        self.nombreCajaEntry.bind(
+            "<Return>", lambda _e: self._confirmarPopupCaja()
+        )
+        self.montoCajaEntry.bind(
+            "<Return>", lambda _e: self._confirmarPopupCaja()
+        )
+
+    def _confirmarPopupCaja(self):
+        """Valida y agrega la caja cargada en el popup (MJ1)."""
+        nombre = self.nombreCajaEntry.get().strip()
+        monto = self._parsearFondo(self.montoCajaEntry.get())
+        if not nombre:
+            self._alerta("El nombre de la caja no puede ser vacío.")
+            return
+        if monto is None or monto < 0:
+            self._alerta("El monto de la caja debe ser un número válido.")
+            return
+        self.cajas.append((nombre, monto))
+        self._renderCajas()
+        self._cerrarPopupCaja()
+
+    def _cerrarPopupCaja(self):
+        """Cierra el popup de nueva caja, si está abierto."""
+        if self.popupCaja is not None and self.popupCaja.winfo_exists():
+            self.popupCaja.destroy()
+        self.popupCaja = None
+
+    def _renderCajas(self):
+        """Redibuja los chips de cajas agregadas (MJ1)."""
+        for widget in self.contenedorCajas.winfo_children():
+            widget.destroy()
+        for idx, (nombre, monto) in enumerate(self.cajas):
+            chip = ctk.CTkFrame(
+                self.contenedorCajas, fg_color=estilos.FILA,
+                corner_radius=estilos.RADIO_PILL,
+            )
+            chip.pack(fill="x", pady=2)
+            ctk.CTkLabel(
+                chip, text=f"{nombre} · {_formatoMonto(monto)}",
+                font=estilos.F_NORMAL, text_color=estilos.TEXTO_CLARO,
+                anchor="w",
+            ).pack(side="left", fill="x", expand=True, padx=(12, 4), pady=5)
+            ctk.CTkButton(
+                chip, text="✕", width=28, height=28,
+                fg_color="transparent", hover_color=estilos.BOTON_BARRA_HOVER,
+                corner_radius=8, font=estilos.F_BOLD,
+                command=lambda i=idx: self._quitarCaja(i),
+            ).pack(side="right", padx=(0, 6))
+
+    def _quitarCaja(self, idx):
+        """Elimina una caja de la lista (MJ1)."""
+        if 0 <= idx < len(self.cajas):
+            self.cajas.pop(idx)
+            self._renderCajas()
+
+    # ------------------------------------------------------------------
+    # Cajas / medios de pago (MJ1): validación de la suma
+    # ------------------------------------------------------------------
+    def _armarCajas(self, fondo):
+        """Valida que las cajas definidas sumen el fondo inicial (MJ1).
+
+        Retorna la lista de (nombre, monto) o None si no coinciden.
+        """
+        if not self.cajas:
+            return []
+        suma = round(sum(monto for _, monto in self.cajas), 2)
+        if round(suma, 2) != round(float(fondo), 2):
+            self._alerta(
+                f"La suma de las cajas ({_formatoMonto(suma)}) debe "
+                f"coincidir con el fondo inicial ({_formatoMonto(fondo)})."
+            )
+            return None
+        return [(nombre, monto) for nombre, monto in self.cajas]
+
+    # ------------------------------------------------------------------
+    # Conversión de entradas
+    # ------------------------------------------------------------------
     @staticmethod
     def _parsearFondo(texto):
         """Convierte el texto del fondo a float; None si no es numérico."""

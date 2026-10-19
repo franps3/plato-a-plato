@@ -19,6 +19,14 @@ from . import estilos
 from .dialogos import PopupPassword
 
 
+def _formatoMonto(valor):
+    """Formatea un monto sin decimales, con separador de miles '.'.
+
+    Ej.: 2500 -> '$2.500'; 11300 -> '$11.300'.
+    """
+    return "$" + f"{valor:,.0f}".replace(",", ".")
+
+
 class VistaConfigSesion(ctk.CTkFrame):
     """Configuración de la sesión: exportar/importar y reiniciar.
 
@@ -50,6 +58,21 @@ class VistaConfigSesion(ctk.CTkFrame):
             self, fg_color=estilos.FONDO_PANEL, corner_radius=estilos.RADIO,
         )
         tarjeta.pack(fill="both", expand=True, padx=48, pady=(6, 24))
+
+        # Valor actual de cada caja (MJ7): se muestra arriba de las acciones.
+        marcoCajas = ctk.CTkFrame(
+            tarjeta, fg_color=estilos.FILA, corner_radius=estilos.RADIO,
+        )
+        marcoCajas.pack(fill="x", padx=12, pady=(0, 8))
+        ctk.CTkLabel(
+            marcoCajas, text="Cajas de la sesión", font=estilos.F_BOLD,
+            text_color=estilos.TEXTO_CLARO, anchor="w",
+        ).pack(fill="x", padx=(14, 8), pady=(10, 2))
+        self.contenedorCajasSesion = ctk.CTkFrame(
+            marcoCajas, fg_color="transparent"
+        )
+        self.contenedorCajasSesion.pack(fill="x", padx=8, pady=(0, 8))
+        self._renderCajasSesion()
 
         self._crearAccion(
             tarjeta,
@@ -91,6 +114,40 @@ class VistaConfigSesion(ctk.CTkFrame):
             fg_color=estilos.BOTON_CLARO, hover_color=estilos.BOTON_CLARO_HOVER,
             corner_radius=estilos.RADIO, command=accion,
         ).pack(side="left", padx=(0, 12))
+
+    def _renderCajasSesion(self):
+        """Muestra el valor actual de cada caja de la sesión (MJ7)."""
+        for widget in self.contenedorCajasSesion.winfo_children():
+            widget.destroy()
+        sesion = self.controlador.sesionActiva
+        cajas = []
+        if sesion is not None:
+            resultado = self.controlador.verCajas(sesion.idSesion)
+            if resultado["ok"]:
+                cajas = resultado["datos"] or []
+        if not cajas:
+            ctk.CTkLabel(
+                self.contenedorCajasSesion,
+                text="Sin cajas registradas.",
+                font=estilos.F_PEQUENA, text_color=estilos.TEXTO_TENUE,
+                anchor="w",
+            ).pack(fill="x", padx=6, pady=2)
+            return
+        for caja in cajas:
+            fila = ctk.CTkFrame(
+                self.contenedorCajasSesion, fg_color=estilos.FONDO_PANEL,
+                corner_radius=8,
+            )
+            fila.pack(fill="x", pady=2)
+            ctk.CTkLabel(
+                fila, text=caja.nombre, font=estilos.F_NORMAL,
+                text_color=estilos.TEXTO_CLARO, anchor="w",
+            ).pack(side="left", fill="x", expand=True, padx=(12, 6), pady=6)
+            ctk.CTkLabel(
+                fila, text=_formatoMonto(caja.monto), font=estilos.F_PRECIO,
+                fg_color=estilos.PILL, text_color=estilos.TEXTO_OSCURO,
+                corner_radius=estilos.RADIO_PILL, width=110,
+            ).pack(side="right", padx=(6, 10), pady=4)
 
     # ------------------------------------------------------------------
     # CU13: Exportar Historial
