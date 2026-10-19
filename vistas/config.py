@@ -674,7 +674,7 @@ class VistaConfigProductos(ctk.CTkFrame):
         self.popupCombo = ctk.CTkToplevel(self)
         self.popupCombo.title("Modificar Combo" if editando else "Añadir Combo")
         self.popupCombo.configure(fg_color=estilos.FONDO)
-        self.popupCombo.geometry("560x520")
+        self.popupCombo.geometry("560x650")
         self.popupCombo.resizable(False, False)
         self.popupCombo.transient(self.winfo_toplevel())
         self.popupCombo.grab_set()
@@ -814,7 +814,7 @@ class VistaConfigProductos(ctk.CTkFrame):
             command=self._cerrarPopupCombo,
         ).pack(side="left", expand=True, fill="x", padx=(0, 8))
         ctk.CTkButton(
-            acciones, text="Guardar", font=estilos.F_BOLD, height=40,
+            acciones, text="Confirmar", font=estilos.F_BOLD, height=40,
             fg_color=estilos.BOTON_BARRA_ACTIVO,
             hover_color=estilos.BOTON_BARRA_HOVER,
             command=self._confirmarCombo,
