@@ -15,9 +15,10 @@ from .modelos import DetalleVenta, GastoSecundario, Venta
 class ServVenta:
     """Capa de servicios de ventas y caja del sistema (Agente 3)."""
 
-    def __init__(self, ventaDAO, stockDAO):
+    def __init__(self, ventaDAO, stockDAO, prodDAO=None):
         self.ventaDAO = ventaDAO
         self.stockDAO = stockDAO
+        self.prodDAO = prodDAO
         # Marca de tiempo del último movimiento: garantiza el orden
         # cronológico del historial (CU12).
         self._ultimaFechaHora = None
@@ -63,16 +64,37 @@ class ServVenta:
         """
         # Marca de tiempo estrictamente creciente (CU12).
         fechaHora = self._nuevaFechaHora()
+        # COR8: IDs de combo para validar stock de componentes.
+        idsCombos = set()
+        if self.prodDAO is not None:
+            idsCombos = {c[0] for c in self.prodDAO.verCombos(idSesion)}
         for detalle in detalles:
-            stock = self.stockDAO.verStock(detalle.idProducto)
-            if stock is None:
-                raise ProductoNoEncontrado(
-                    "No se encontró el producto solicitado."
+            if detalle.idProducto in idsCombos:
+                # Combo: validar stock de cada componente.
+                componentes = self.prodDAO.verComponentesCombo(
+                    detalle.idProducto
                 )
-            if stock < detalle.cantidad:
-                raise StockInsuficiente(
-                    f"Stock insuficiente para el producto {detalle.idProducto}."
-                )
+                for idComp, cantComp in componentes:
+                    stockComp = self.stockDAO.verStock(idComp)
+                    if stockComp is None:
+                        raise ProductoNoEncontrado(
+                            "No se encontró un componente del combo."
+                        )
+                    if stockComp < detalle.cantidad * cantComp:
+                        raise StockInsuficiente(
+                            f"Stock insuficiente del componente {idComp} "
+                            f"para el combo {detalle.idProducto}."
+                        )
+            else:
+                stock = self.stockDAO.verStock(detalle.idProducto)
+                if stock is None:
+                    raise ProductoNoEncontrado(
+                        "No se encontró el producto solicitado."
+                    )
+                if stock < detalle.cantidad:
+                    raise StockInsuficiente(
+                        f"Stock insuficiente para el producto {detalle.idProducto}."
+                    )
 
         montoNeto = round(
             sum(detalle.monto for detalle in detalles), 2

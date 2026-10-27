@@ -29,7 +29,7 @@ def controlador():
 
 def test_cu1_creaSesionValida(controlador):
     """CU1: crea sesión con password y fondo; caja arranca igual al fondo."""
-    resultado = controlador.crearSesion("clave1234", 1500.50)
+    resultado = controlador.crearSesion("clave1234", cajas=[("Caja principal", 1500.50)])
 
     assert resultado["ok"] is True
     assert resultado["datos"] is not None
@@ -40,8 +40,8 @@ def test_cu1_creaSesionValida(controlador):
 
 def test_cu1_fallaSiYaExisteSesion(controlador):
     """CU1: no permite crear más de una sesión (sesión única en bd)."""
-    controlador.crearSesion("clave1234", 500)
-    resultado = controlador.crearSesion("otraclave", 800)
+    controlador.crearSesion("clave1234")
+    resultado = controlador.crearSesion("otraclave")
 
     assert resultado["ok"] is False
     assert "ya existe" in resultado["mensaje"].lower()
@@ -50,30 +50,14 @@ def test_cu1_fallaSiYaExisteSesion(controlador):
 def test_cu1_fallaPasswordCorta(controlador):
     """CU1: rechaza contraseñas de menos de 4 caracteres."""
     for passwordCorta in ["abc", "", "   ", None]:
-        resultado = controlador.crearSesion(passwordCorta, 500)
+        resultado = controlador.crearSesion(passwordCorta)
         assert resultado["ok"] is False
         assert "4 caracteres" in resultado["mensaje"]
 
 
-def test_cu1_fallaFondoNegativo(controlador):
-    """CU1: rechaza un fondo inicial negativo."""
-    resultado = controlador.crearSesion("clave1234", -50)
-
-    assert resultado["ok"] is False
-    assert "fondo" in resultado["mensaje"].lower()
-
-
-def test_cu1_fallaFondoInvalido(controlador):
-    """CU1: rechaza fondos no numéricos o vacíos."""
-    for fondoInvalido in ["abc", "", None, True]:
-        resultado = controlador.crearSesion("clave1234", fondoInvalido)
-        assert resultado["ok"] is False
-        assert "fondo" in resultado["mensaje"].lower()
-
-
 def test_cu1_hashPasswordCorrecto(controlador):
     """CU1: la bd guarda el hash SHA-256 y no el texto plano."""
-    controlador.crearSesion("clave1234", 500)
+    controlador.crearSesion("clave1234")
     sesionBd = controlador.dao.obtenerSesion()
     # (ID, Fecha_inicio, Fondo_inicial, Caja, Pass)
     passHash = sesionBd[4]
@@ -87,7 +71,7 @@ def test_cu1_hashPasswordCorrecto(controlador):
 
 def test_cu2_iniciaSesionCorrecta(controlador):
     """CU2: con la credencial correcta desbloquea la interfaz."""
-    controlador.crearSesion("clave1234", 500)
+    controlador.crearSesion("clave1234")
     credenciales = {
         "clave1234": True,   # Única credencial correcta (hash coincide).
         "clave12345": False,
@@ -120,7 +104,7 @@ def test_cu2_fallaSesionNoCreada():
 
 def test_cu3_cierraSesionLimpiaEstado(controlador):
     """CU3: limpia sesión activa y carrito; vuelve a pedir credenciales."""
-    controlador.crearSesion("clave1234", 500)
+    controlador.crearSesion("clave1234")
     controlador.iniciarSesion("clave1234")
     controlador.carrito = {1: 3, 2: 1}
 
@@ -133,7 +117,7 @@ def test_cu3_cierraSesionLimpiaEstado(controlador):
 
 def test_cu3_requiereLoginNuevo(controlador):
     """CU3: tras cerrar, la vista debe volver a login (autenticado False)."""
-    controlador.crearSesion("clave1234", 0)
+    controlador.crearSesion("clave1234")
     controlador.iniciarSesion("clave1234")
     controlador.cerrarSesion()
     assert controlador.estaAutenticado() is False

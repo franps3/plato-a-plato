@@ -30,7 +30,7 @@ def controlador():
         prodDAO=FakeProdDAO(bd),
         stockDAO=FakeStockDAO(bd),
     )
-    ctrl.crearSesion("clave1234", 500)
+    ctrl.crearSesion("clave1234", cajas=[("Caja principal", 500)])
     ctrl.iniciarSesion("clave1234")
     return ctrl
 

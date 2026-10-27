@@ -46,12 +46,12 @@ def _idCaja(controlador):
 def test_mj1_creaSesionConCajasMultiples(controlador):
     """MJ1: crearSesion acepta lista de cajas y crea una por item."""
     cajas = [("Efectivo", 300.00), ("MercadoPago", 200.00)]
-    resultado = controlador.crearSesion("clave1234", 1000.00, cajas=cajas)
+    resultado = controlador.crearSesion("clave1234", cajas=cajas)
 
     assert resultado["ok"] is True
     sesion = resultado["datos"]
-    assert sesion.fondoInicial == 1000.00
-    assert sesion.caja == 1000.00
+    assert sesion.fondoInicial == 500.00
+    assert sesion.caja == 500.00
 
     cajasBd = controlador.dao.verCajas(sesion.idSesion)
     assert len(cajasBd) == 2
@@ -64,19 +64,19 @@ def test_mj1_creaSesionConCajasMultiples(controlador):
 
 def test_mj1_creaSesionSinCajasCreaCajaPrincipal(controlador):
     """MJ1: si no se pasan cajas, se crea la 'Caja principal' (CU1 intacto)."""
-    resultado = controlador.crearSesion("clave1234", 500.00)
+    resultado = controlador.crearSesion("clave1234")
 
     assert resultado["ok"] is True
     sesion = resultado["datos"]
     cajasBd = controlador.dao.verCajas(sesion.idSesion)
     assert len(cajasBd) == 1
     assert cajasBd[0][1] == "Caja principal"
-    assert cajasBd[0][3] == 500.00
+    assert cajasBd[0][3] == 0.00
 
 
 def test_mj1_verCajas(controlador):
     """MJ1: verCajas lista las cajas de la sesión."""
-    controlador.crearSesion("clave1234", 1000.00,
+    controlador.crearSesion("clave1234",
                             cajas=[("Efectivo", 300.00), ("Tarjeta", 700.00)])
     sesion = controlador.sesionActiva
 
@@ -91,7 +91,7 @@ def test_mj1_verCajas(controlador):
 
 def test_mj1_verTotalCajas(controlador):
     """MJ1/MJ7: verTotalCajas suma los Monto de todas las cajas."""
-    controlador.crearSesion("clave1234", 1000.00,
+    controlador.crearSesion("clave1234",
                             cajas=[("Efectivo", 300.00), ("Tarjeta", 700.00)])
     sesion = controlador.sesionActiva
 
@@ -102,7 +102,7 @@ def test_mj1_verTotalCajas(controlador):
 
 def test_mj1_obtenerCaja(controlador):
     """MJ1: obtenerCaja devuelve una caja por su ID."""
-    controlador.crearSesion("clave1234", 1000.00,
+    controlador.crearSesion("clave1234",
                             cajas=[("Efectivo", 300.00)])
     idCaja = _idCaja(controlador)
 
@@ -116,7 +116,8 @@ def test_mj1_obtenerCaja(controlador):
 
 def test_mj1_obtenerCajaNoExiste(controlador):
     """MJ1: obtenerCaja con ID inexistente falla."""
-    controlador.crearSesion("clave1234", 500.00)
+    controlador.crearSesion("clave1234",
+                            cajas=[("Caja principal", 500.00)])
 
     resultado = controlador.obtenerCaja(9999)
     assert resultado["ok"] is False
@@ -125,7 +126,7 @@ def test_mj1_obtenerCajaNoExiste(controlador):
 
 def test_mj1_confirmarVentaAceptaIdCaja(controlador):
     """MJ1: confirmarVenta acepta idCaja (falla por carrito vacío, no por caja)."""
-    controlador.crearSesion("clave1234", 1000.00,
+    controlador.crearSesion("clave1234",
                             cajas=[("Efectivo", 300.00)])
     idCaja = _idCaja(controlador)
 
@@ -148,7 +149,7 @@ def _crearProducto(controlador, nombre, precio, stock=10):
 
 def _crearSesionYProductos(controlador):
     """Helper: crea sesión y dos productos para usar como componentes."""
-    controlador.crearSesion("clave1234", 1000.00)
+    controlador.crearSesion("clave1234", cajas=[("Caja principal", 1000.00)])
     idHamburguesa = _crearProducto(controlador, "Hamburguesa", 2500.00, 10)
     idPapas = _crearProducto(controlador, "Papas fritas", 1500.00, 20)
     return idHamburguesa, idPapas

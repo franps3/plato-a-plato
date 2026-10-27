@@ -37,7 +37,7 @@ def controlador():
         stockDAO=FakeStockDAO(bd),
         ventaDAO=FakeVentaDAO(bd),
     )
-    ctrl.crearSesion("clave1234", 500)
+    ctrl.crearSesion("clave1234", cajas=[("Caja principal", 500)])
     ctrl.iniciarSesion("clave1234")
     return ctrl
 
@@ -191,7 +191,8 @@ def test_cu15_trasReiniciarSePuedeCrearSesionNueva(controlador):
     _generarMovimientos(controlador)
     controlador.reiniciar("clave1234")
 
-    resultado = controlador.crearSesion("nuevaClave", 1000)
+    resultado = controlador.crearSesion("nuevaClave",
+                                        cajas=[("Caja principal", 1000)])
 
     assert resultado["ok"] is True
     assert controlador.estaAutenticado() is True
