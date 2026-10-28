@@ -20,6 +20,8 @@
 #     editarCombo y eliminarCombo. DetalleVenta no cambia: el combo se
 #     vende como un producto más ("agregar a una venta como un producto
 #     más"). verProductos() los incluye junto con los productos comunes.
+#     COR8: el combo NO tiene stock propio (crearCombo ya no recibe
+#     stock); su disponibilidad se deriva del stock de sus componentes.
 #
 # Regla clave de Agente 1: capturar sqlite3.Error, ejecutar ROLLBACK y
 # re-elevar como subclase de PersistenceError (control.excepciones).
@@ -106,15 +108,16 @@ class prodDAO:
 
     @staticmethod
     def crearCombo(idSesion: int, nombre: str, precio: float,
-                   componentes: list, stock: int = 0) -> int:
-        """Persiste un combo como Producto (Es_combo=1) + sus componentes (MJ4).
+                   componentes: list) -> int:
+        """Persiste un combo (Producto Es_combo=1) + sus componentes (MJ4).
 
         Parámetros:
             componentes: lista de tuplas (ID_producto, Cantidad) con los
                 productos y cantidades que componen UNA unidad del combo.
-            stock: stock propio del combo (opcional; por defecto 0). El
-                Agente 3 decide si deriva la disponibilidad desde los
-                componentes o gestiona este valor.
+
+        COR8: el combo NO tiene stock propio; su fila Producto se persiste
+        con Stock=0 siempre. La disponibilidad se deriva del stock de sus
+        componentes (stockDAO.verStock lo calcula vía DetalleCombo).
 
         Toda la escritura ocurre en UNA transacción: si algo falla,
         mainDAO._manejarError ejecuta ROLLBACK y eleva PersistenceError.
@@ -125,8 +128,8 @@ class prodDAO:
             mainDAO.cursor.execute(
                 "INSERT INTO Producto "
                 "(ID_sesion, Nombre, Stock, Precio, Es_combo) "
-                "VALUES (?, ?, ?, ?, 1)",
-                (idSesion, nombre, stock, precio),
+                "VALUES (?, ?, 0, ?, 1)",
+                (idSesion, nombre, precio),
             )
             idCombo = mainDAO.cursor.lastrowid
             filas = [

@@ -41,12 +41,13 @@ def bdTemporal(tmp_path, monkeypatch):
 
 
 def test_mj1_creaSesionConVariasCajas(bdTemporal):
-    """MJ1: crearSesion acepta varias cajas (nombre, monto).
+    """MJ1/COR7: crearSesion acepta varias cajas (nombre, monto).
 
-    Cada caja arranca con Fondo_inicial = Monto = monto indicado.
+    Cada caja arranca con Fondo_inicial = Monto = monto indicado y el
+    fondo inicial de la sesión pasa a ser la suma de esas cajas (COR7).
     """
     idSesion = mainDAO.crearSesion(
-        "hash-de-prueba", 500.0, 500.0, "2026-09-13 10:00:00",
+        "hash-de-prueba", "2026-09-13 10:00:00",
         cajas=[("Efectivo", 300.0), ("Mercado Pago", 200.0)],
     )
     cajas = mainDAO.verCajas(idSesion)
@@ -54,24 +55,32 @@ def test_mj1_creaSesionConVariasCajas(bdTemporal):
         ("Efectivo", 300.0, 300.0),
         ("Mercado Pago", 200.0, 200.0),
     ]
+    # COR7: Fondo_inicial y Caja de la sesión = suma de las cajas (500).
+    sesion = mainDAO.obtenerSesion()
+    assert sesion[2] == 500.0   # Fondo_inicial
+    assert sesion[3] == 500.0   # Caja
 
 
 def test_mj1_sinCajasCreaCajaPrincipal(bdTemporal):
-    """MJ1: sin el parámetro cajas se crea la 'Caja principal' (CU1)."""
+    """MJ1/COR7: sin el parámetro cajas se crea la 'Caja principal' con 0.
+
+    El fondo inicial ya no se define por separado (COR7): sin cajas
+    indicadas, la caja principal arranca con monto 0.
+    """
     idSesion = mainDAO.crearSesion(
-        "hash-de-prueba", 500.0, 500.0, "2026-09-13 10:00:00"
+        "hash-de-prueba", "2026-09-13 10:00:00"
     )
     cajas = mainDAO.verCajas(idSesion)
     assert len(cajas) == 1
     assert cajas[0][1] == "Caja principal"
-    assert cajas[0][2] == 500.0   # Fondo_inicial
-    assert cajas[0][3] == 500.0   # Monto
+    assert cajas[0][2] == 0.0   # Fondo_inicial
+    assert cajas[0][3] == 0.0   # Monto
 
 
 def test_mj7_verTotalCajasSumaMontos(bdTemporal):
     """MJ7: verTotalCajas devuelve la suma de los Monto de todas las cajas."""
     idSesion = mainDAO.crearSesion(
-        "hash", 600.0, 600.0, "2026-09-13 10:00:00",
+        "hash", "2026-09-13 10:00:00",
         cajas=[("Efectivo", 400.0), ("Tarjeta", 200.0)],
     )
     assert mainDAO.verTotalCajas(idSesion) == 600.0
@@ -80,7 +89,7 @@ def test_mj7_verTotalCajasSumaMontos(bdTemporal):
 def test_mj1_obtenerCajaPorId(bdTemporal):
     """MJ1: obtenerCaja devuelve la tupla completa o None si no existe."""
     idSesion = mainDAO.crearSesion(
-        "hash", 500.0, 500.0, "2026-09-13 10:00:00",
+        "hash", "2026-09-13 10:00:00",
         cajas=[("Efectivo", 500.0)],
     )
     idCaja = mainDAO.verCajas(idSesion)[0][0]
@@ -94,7 +103,7 @@ def test_mj1_obtenerCajaPorId(bdTemporal):
 def test_mj1_registrarVentaModificaCajaAsignada(bdTemporal):
     """MJ1: una venta con idCaja suma su monto a esa caja (delta)."""
     idSesion = mainDAO.crearSesion(
-        "hash", 500.0, 500.0, "2026-09-13 10:00:00",
+        "hash", "2026-09-13 10:00:00",
         cajas=[("Efectivo", 300.0), ("Mercado Pago", 200.0)],
     )
     idProducto = prodDAO().crearProducto("A", 5, 100.0, idSesion)
@@ -114,7 +123,7 @@ def test_mj1_registrarVentaModificaCajaAsignada(bdTemporal):
 def test_mj1_registrarGastoDescuentaCajaAsignada(bdTemporal):
     """MJ1: un gasto con idCaja resta su monto a esa caja (delta firmado)."""
     idSesion = mainDAO.crearSesion(
-        "hash", 500.0, 500.0, "2026-09-13 10:00:00",
+        "hash", "2026-09-13 10:00:00",
         cajas=[("Efectivo", 300.0), ("Mercado Pago", 200.0)],
     )
     idEfectivo, idMp = (c[0] for c in mainDAO.verCajas(idSesion))
@@ -131,7 +140,7 @@ def test_mj1_registrarGastoDescuentaCajaAsignada(bdTemporal):
 
 def test_mj1_idCajaInexistenteElevaPersistenceError(bdTemporal):
     """MJ1: asignar una caja inexistente a una venta es PersistenceError."""
-    idSesion = mainDAO.crearSesion("hash", 500.0, 500.0, "2026-09-13 10:00:00")
+    idSesion = mainDAO.crearSesion("hash", "2026-09-13 10:00:00")
     idProducto = prodDAO().crearProducto("A", 5, 100.0, idSesion)
 
     with pytest.raises(PersistenceError):
@@ -143,7 +152,10 @@ def test_mj1_idCajaInexistenteElevaPersistenceError(bdTemporal):
 
 def test_mj1_registrarVentaSinIdCajaConservaComportamiento(bdTemporal):
     """MJ1: sin idCaja se conserva el comportamiento previo (caja principal)."""
-    idSesion = mainDAO.crearSesion("hash", 500.0, 500.0, "2026-09-13 10:00:00")
+    idSesion = mainDAO.crearSesion(
+        "hash", "2026-09-13 10:00:00",
+        cajas=[("Caja principal", 500.0)],
+    )
     idProducto = prodDAO().crearProducto("A", 5, 100.0, idSesion)
 
     ventaDAO().registrarVenta(
@@ -160,7 +172,7 @@ def test_mj1_registrarVentaSinIdCajaConservaComportamiento(bdTemporal):
 def test_mj1_nukeLimpiaCajas(bdTemporal):
     """CU15: reiniciar (nuke) limpia también las cajas de la sesión."""
     idSesion = mainDAO.crearSesion(
-        "hash", 500.0, 500.0, "2026-09-13 10:00:00",
+        "hash", "2026-09-13 10:00:00",
         cajas=[("Efectivo", 300.0), ("Mercado Pago", 200.0)],
     )
     assert len(mainDAO.verCajas(idSesion)) == 2

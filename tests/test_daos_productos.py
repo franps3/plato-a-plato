@@ -43,7 +43,8 @@ def bdTemporal(tmp_path, monkeypatch):
 def sesionId(bdTemporal):
     """Crea la sesión única en la BD temporal (CU1) y devuelve su ID_sesion."""
     return mainDAO.crearSesion(
-        "hash-de-prueba", 500.0, 500.0, "2026-09-13 10:00:00"
+        "hash-de-prueba", "2026-09-13 10:00:00",
+        cajas=[("Caja principal", 500.0)],
     )
 
 
@@ -106,8 +107,12 @@ def test_cu5_ordenNoDistingueMayusculas(bdTemporal, sesionId):
 
 def test_cu5_aislaProductosPorSesion(bdTemporal):
     """CU5: cada sesión ve únicamente sus propios productos."""
-    idSesionA = mainDAO.crearSesion("hash-a", 100.0, 100.0, "t1")
-    idSesionB = mainDAO.crearSesion("hash-b", 200.0, 200.0, "t2")
+    idSesionA = mainDAO.crearSesion(
+        "hash-a", "t1", cajas=[("Caja principal", 100.0)]
+    )
+    idSesionB = mainDAO.crearSesion(
+        "hash-b", "t2", cajas=[("Caja principal", 200.0)]
+    )
     idA = prodDAO().crearProducto("Pizza", 2, 3000.0, idSesionA)
     prodDAO().crearProducto("Empanada", 4, 800.0, idSesionB)
 

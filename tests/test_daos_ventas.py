@@ -44,7 +44,8 @@ def bdTemporal(tmp_path, monkeypatch):
 def sesionId(bdTemporal):
     """Crea la sesión única (CU1) con caja 500 y devuelve su ID_sesion."""
     return mainDAO.crearSesion(
-        "hash-de-prueba", 500.0, 500.0, "2026-09-13 10:00:00"
+        "hash-de-prueba", "2026-09-13 10:00:00",
+        cajas=[("Caja principal", 500.0)],
     )
 
 
@@ -169,8 +170,12 @@ def test_cu11_violacionDeFkElevaPersistenceError(bdTemporal):
 
 def test_cu12_aislaMovimientosPorSesion(bdTemporal):
     """CU12: cada sesión ve únicamente sus propios movimientos."""
-    idSesionA = mainDAO.crearSesion("hash-a", 100.0, 100.0, "t1")
-    idSesionB = mainDAO.crearSesion("hash-b", 200.0, 200.0, "t2")
+    idSesionA = mainDAO.crearSesion(
+        "hash-a", "t1", cajas=[("Caja principal", 100.0)]
+    )
+    idSesionB = mainDAO.crearSesion(
+        "hash-b", "t2", cajas=[("Caja principal", 200.0)]
+    )
     idA = prodDAO().crearProducto("Pizza", 2, 3000.0, idSesionA)
     prodDAO().crearProducto("Empanada", 4, 800.0, idSesionB)
 
@@ -237,8 +242,12 @@ def test_cu14_devuelveCantidadDeVentasBorradas(bdTemporal, sesionId,
 
 def test_cu14_soloLimpiaLaSesionIndicada(bdTemporal):
     """CU14: borrar el historial de una sesión no afecta a las demás."""
-    idSesionA = mainDAO.crearSesion("hash-a", 100.0, 100.0, "t1")
-    idSesionB = mainDAO.crearSesion("hash-b", 200.0, 200.0, "t2")
+    idSesionA = mainDAO.crearSesion(
+        "hash-a", "t1", cajas=[("Caja principal", 100.0)]
+    )
+    idSesionB = mainDAO.crearSesion(
+        "hash-b", "t2", cajas=[("Caja principal", 200.0)]
+    )
     idA = prodDAO().crearProducto("A", 3, 100.0, idSesionA)
     idB = prodDAO().crearProducto("B", 3, 100.0, idSesionB)
 

@@ -5,11 +5,11 @@
 # (CU1/CU2/CU3).
 #
 # Contrato acordado (definido por el Agente 3):
-#   * crearSesion(passHash, fondoInicial, caja, fechaInicio,
-#                 cajas=None) -> int
-#       Persiste la sesión única y devuelve su ID_sesion. Si cajas es una
-#       lista de (nombre, monto) se crea una caja por ítem (MJ1); si no,
-#       crea la "Caja principal" con el fondo inicial (comportamiento CU1).
+#   * crearSesion(passHash, fechaInicio, cajas=None) -> int
+#       Persiste la sesión única y devuelve su ID_sesion. COR7: el fondo
+#       inicial ya no se recibe como parámetro; se calcula como la suma de
+#       los montos de las cajas creadas (lista de (nombre, monto)). Si no
+#       se indican cajas, se crea la "Caja principal" con monto 0.
 #   * obtenerSesion() -> tuple | None
 #       Devuelve (ID_sesion, Fecha_inicio, Fondo_inicial, Caja, Pass)
 #       de la sesión registrada, o None si no existe.
@@ -241,30 +241,35 @@ class mainDAO:
         raise PersistenceError(f"Error de persistencia: {err}") from err
 
     @staticmethod
-    def crearSesion(passHash: str, fondoInicial: float, caja: float,
-                    fechaInicio: str, cajas=None) -> int:
+    def crearSesion(passHash: str, fechaInicio: str, cajas=None) -> int:
         """Persiste la sesión única y devuelve su ID_sesion (CU1).
 
         La sesión es única en la base: el controlador valida antes de
         llamar que no exista una sesión registrada (SesionYaExiste).
 
         Parámetros:
-            cajas: opcional (MJ1). Lista de (nombre, monto) con las cajas
-                (medios de pago) que se crean junto con la sesión. Si no
-                se pasa o viene vacía, se crea la "Caja principal" con el
-                fondoInicial (comportamiento original del CU1).
+            cajas: COR7. Lista de (nombre, monto) con las cajas (medios de
+                pago) que se crean junto con la sesión. El fondo inicial
+                de la sesión (Fondo_inicial/Caja) se calcula como la suma
+                de los montos de estas cajas. Si no se pasa o viene vacía,
+                se crea la "Caja principal" con monto 0.
         """
         mainDAO.conectar()
         try:
+            # COR7: el fondo inicial es la suma de los montos de las cajas.
+            totalInicial = round(
+                sum(monto for _, monto in (cajas or [])), 2
+            )
             mainDAO.cursor.execute(
                 "INSERT INTO Sesion (Fecha_inicio, Fondo_inicial, Caja, Pass) "
                 "VALUES (?, ?, ?, ?)",
-                (fechaInicio, fondoInicial, caja, passHash),
+                (fechaInicio, totalInicial, totalInicial, passHash),
             )
             idSesion = mainDAO.cursor.lastrowid
             # MJ1 (N cajas): la sesión arranca con las cajas indicadas o,
-            # por defecto, con su "Caja principal" (fondo = monto actual).
-            cajasCrear = cajas if cajas else [("Caja principal", caja)]
+            # por defecto, con su "Caja principal" (fondo = monto actual =
+            # 0 por COR7).
+            cajasCrear = cajas if cajas else [("Caja principal", 0.0)]
             for nombreCaja, montoCaja in cajasCrear:
                 mainDAO.cursor.execute(
                     "INSERT INTO Caja (ID_sesion, Nombre, Fondo_inicial, "

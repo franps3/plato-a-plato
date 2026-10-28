@@ -45,7 +45,8 @@ def bdTemporal(tmp_path, monkeypatch):
 def sesionId(bdTemporal):
     """Crea la sesión única (CU1) con caja 500 y devuelve su ID_sesion."""
     return mainDAO.crearSesion(
-        "hash-de-prueba", 500.0, 500.0, "2026-09-13 10:00:00"
+        "hash-de-prueba", "2026-09-13 10:00:00",
+        cajas=[("Caja principal", 500.0)],
     )
 
 
@@ -274,7 +275,10 @@ def test_cu16_cu17_redondoExportaZipYReimporta(bdTemporal, sesionId,
 
     # La BD cambia (otra sesión), luego se reimporta la exportada.
     mainDAO.nuke()
-    mainDAO.crearSesion("hash-otra", 99.0, 99.0, "2026-09-15 08:00:00")
+    mainDAO.crearSesion(
+        "hash-otra", "2026-09-15 08:00:00",
+        cajas=[("Caja principal", 99.0)],
+    )
 
     sesion = mainDAO.importar(rutaZip, "hash-reimportada")
 

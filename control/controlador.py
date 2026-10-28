@@ -138,8 +138,7 @@ class Controlador:
             fechaInicio = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             passHash = self.hashearPassword(password)
             idSesion = self.dao.crearSesion(
-                passHash, fondoInicial, fondoInicial, fechaInicio,
-                cajas,
+                passHash, fechaInicio, cajas,
             )
 
             # Actualiza el estado de la sesiÃ³n en el controlador.

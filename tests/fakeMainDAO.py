@@ -37,17 +37,22 @@ class FakeMainDAO:
     def __init__(self, bd=None):
         self._bd = bd if bd is not None else FakeBD()
 
-    def crearSesion(self, passHash, fondoInicial, caja, fechaInicio,
-                    cajas=None) -> int:
+    def crearSesion(self, passHash, fechaInicio, cajas=None) -> int:
         """Persiste (sobreescribe) la sesión simulada y devuelve su ID.
 
-        MJ1: si se pasa cajas (lista de (nombre, monto)) se crean esas cajas;
-        si no, se crea la "Caja principal" con el fondo inicial.
+        COR7: el fondo inicial ya no se recibe como parámetro; se calcula
+        como la suma de los montos de las cajas (lista de (nombre, monto)).
+        Si no se pasan cajas, se crea la "Caja principal" con monto 0.
         """
+        totalInicial = round(
+            sum(monto for _, monto in (cajas or [])), 2
+        )
         idSesion = self._bd._proximoIdSesion
         self._bd._proximoIdSesion += 1
-        self._bd.sesion = (idSesion, fechaInicio, fondoInicial, caja, passHash)
-        cajasCrear = cajas if cajas else [("Caja principal", caja)]
+        self._bd.sesion = (
+            idSesion, fechaInicio, totalInicial, totalInicial, passHash
+        )
+        cajasCrear = cajas if cajas else [("Caja principal", 0.0)]
         for nombreCaja, montoCaja in cajasCrear:
             idCaja = self._bd._proximoIdCaja
             self._bd._proximoIdCaja += 1
