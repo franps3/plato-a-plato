@@ -108,7 +108,8 @@ def test_cu13_generaXlsxConVentasYGastos(bdTemporal, conMovimientos,
     assert ruta.endswith(".xlsx") and Path(ruta).exists()
 
     libro = load_workbook(ruta)
-    assert set(libro.sheetnames) == {"Ventas", "Gastos", "Cajas"}
+    assert set(libro.sheetnames) == {"Ventas", "Gastos", "Cajas",
+                                     "Estadísticas"}
     filasVentas = list(libro["Ventas"].iter_rows(values_only=True))
     assert filasVentas[0] == ("Fecha y hora", "Producto", "Cantidad",
                               "Precio unitario", "Subtotal")
@@ -142,6 +143,29 @@ def test_cu13_xlsxConHistorialVacioSoloHeaders(bdTemporal, sesionId,
     libro = load_workbook(ruta)
     assert len(list(libro["Ventas"].iter_rows(values_only=True))) == 1
     assert len(list(libro["Gastos"].iter_rows(values_only=True))) == 1
+
+
+def test_cu13_xlsxIncluyeHojaEstadisticas(bdTemporal, conMovimientos,
+                                          tmp_path):
+    """MJ2: el .xlsx incluye la hoja 'Estadísticas' con las 7 métricas."""
+    ruta = mainDAO.exportar("historial", str(tmp_path / "stats.xlsx"))
+    libro = load_workbook(str(ruta))
+
+    assert "Estadísticas" in libro.sheetnames
+    hoja = libro["Estadísticas"]
+    filas = list(hoja.iter_rows(values_only=True))
+    assert filas[0] == ("Indicador", "Valor")
+    valores = {fila[0]: fila[1] for fila in filas[1:]}
+    # Ventas 2300 (2x150 + 1x2000); sin reingresos en la sesión.
+    assert valores["Total de entradas $"] == 2300.0
+    # Único gasto de -100 en valor absoluto.
+    assert valores["Total de salidas $"] == 100.0
+    assert valores["Cantidad de productos vendidos"] == 3
+    assert valores["Cantidad de combos vendidos"] == 0
+    assert valores["Cantidad de gastos/reingresos registrados"] == 1
+    # Producto más vendido: Empanada (2) vs Pizza (1).
+    assert valores["Producto más vendido"] == "Empanada (2)"
+    assert valores["Combo más vendido"] == "Sin registros"
 
 
 def test_cu13_agregaExtensionYRespetaRutaCompleta(bdTemporal,

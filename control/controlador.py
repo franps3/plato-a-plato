@@ -175,7 +175,7 @@ class Controlador:
                     "No hay una sesiÃ³n registrada. Cree una sesiÃ³n primero."
                 )
 
-            idSesion, fechaInicio, fondoInicial, caja, passHash = sesionBd
+            idSesion, fechaInicio, fondoInicial, caja, passHash = sesionBd[:5]
             if passHash != self.hashearPassword(password):
                 raise CredencialInvalida("ContraseÃ±a incorrecta.")
 
@@ -963,7 +963,7 @@ class Controlador:
                 raise SesionNoEncontrada(
                     "El archivo no contiene una sesiÃ³n importable."
                 )
-            idSesion, fechaInicio, fondoInicial, caja, _ = sesionBd
+            idSesion, fechaInicio, fondoInicial, caja, _ = sesionBd[:5]
             self.sesionActiva = Sesion(
                 idSesion=idSesion,
                 fechaInicio=fechaInicio,

@@ -37,12 +37,15 @@ class FakeMainDAO:
     def __init__(self, bd=None):
         self._bd = bd if bd is not None else FakeBD()
 
-    def crearSesion(self, passHash, fechaInicio, cajas=None) -> int:
+    def crearSesion(self, passHash, fechaInicio, cajas=None,
+                    preguntaSeguridad="", respuestaHash="") -> int:
         """Persiste (sobreescribe) la sesión simulada y devuelve su ID.
 
         COR7: el fondo inicial ya no se recibe como parámetro; se calcula
         como la suma de los montos de las cajas (lista de (nombre, monto)).
         Si no se pasan cajas, se crea la "Caja principal" con monto 0.
+        MJ3: preguntaSeguridad/respuestaHash se guardan en la sesión
+        simulada (la respuesta viaja HASHEADA desde el Agente 3).
         """
         totalInicial = round(
             sum(monto for _, monto in (cajas or [])), 2
@@ -50,7 +53,8 @@ class FakeMainDAO:
         idSesion = self._bd._proximoIdSesion
         self._bd._proximoIdSesion += 1
         self._bd.sesion = (
-            idSesion, fechaInicio, totalInicial, totalInicial, passHash
+            idSesion, fechaInicio, totalInicial, totalInicial, passHash,
+            preguntaSeguridad, respuestaHash,
         )
         cajasCrear = cajas if cajas else [("Caja principal", 0.0)]
         for nombreCaja, montoCaja in cajasCrear:
@@ -123,9 +127,27 @@ class FakeMainDAO:
         if not Path(rutaZip).exists():
             raise PersistenceError("El archivo de sesión no existe.")
         if passNueva:
-            idSesion, fecha, fondo, caja, _ = self._bd.sesion
-            self._bd.sesion = (idSesion, fecha, fondo, caja, passNueva)
+            idSesion, fecha, fondo, caja, _, pregunta, respuesta = self._bd.sesion
+            self._bd.sesion = (
+                idSesion, fecha, fondo, caja, passNueva, pregunta, respuesta
+            )
         return self._bd.sesion
+
+    def obtenerPreguntaSeguridad(self):
+        """Devuelve (ID_sesion, Pregunta, Respuesta) o None (MJ3)."""
+        if self._bd.sesion is None:
+            return None
+        return (self._bd.sesion[0], self._bd.sesion[5], self._bd.sesion[6])
+
+    def actualizarPass(self, passNuevaHash) -> bool:
+        """Reemplaza la Pass de la sesión; True si actualizó (MJ3)."""
+        if self._bd.sesion is None:
+            return False
+        idSesion, fecha, fondo, caja, _, pregunta, respuesta = self._bd.sesion
+        self._bd.sesion = (
+            idSesion, fecha, fondo, caja, passNuevaHash, pregunta, respuesta
+        )
+        return True
 
 
 class FakeProdDAO:
@@ -265,8 +287,12 @@ class FakeVentaDAO:
         """Actualiza la columna Caja de la sesión simulada."""
         if self._bd.sesion is None:
             return
-        idSesion, fechaInicio, fondoInicial, caja, passHash = self._bd.sesion
-        self._bd.sesion = (idSesion, fechaInicio, fondoInicial, cajaNueva, passHash)
+        idSesion, fechaInicio, fondoInicial, caja, passHash, \
+            pregunta, respuesta = self._bd.sesion
+        self._bd.sesion = (
+            idSesion, fechaInicio, fondoInicial, cajaNueva, passHash,
+            pregunta, respuesta,
+        )
 
     def _ajustarMontoCaja(self, idCaja, delta):
         """Suma delta al Monto de una caja específica (MJ1). Retorna False si no existe."""
@@ -347,3 +373,69 @@ class FakeVentaDAO:
             if g[1] != idSesion
         }
         return len(ventasABorrar)
+
+    def obtenerEstadisticas(self, idSesion) -> dict:
+        """Falso: calcula las estadísticas MJ2 sobre el estado en memoria.
+
+        Replica el contrato del ventaDAO real con los mismos nombres de
+        claves y el mismo formato de los 'más vendido' (tuplas o None).
+        """
+        detalles = [
+            tuple(detalle)
+            for v in self._bd.ventas.values()
+            if v[1] == idSesion
+            for detalle in v[4]
+        ]
+        gastos = [
+            g for g in self._bd.gastos.values() if g[1] == idSesion
+        ]
+        totalEntradas = round(
+            sum(cantidad * precio for _, cantidad, precio in detalles)
+            + sum(g[3] for g in gastos if g[3] > 0), 2
+        )
+        totalSalidas = round(
+            abs(sum(g[3] for g in gastos if g[3] < 0)), 2
+        )
+
+        cantidadProductos = 0
+        cantidadCombos = 0
+        porProducto = {}
+        porCombo = {}
+        for idProducto, cantidad, _ in detalles:
+            if idProducto in self._bd.combos:
+                cantidadCombos += cantidad
+                porCombo[idProducto] = porCombo.get(idProducto, 0) + cantidad
+                for idComponente, cantComponente in (
+                        self._bd.detalleCombo.get(idProducto, [])):
+                    unidades = cantidad * cantComponente
+                    cantidadProductos += unidades
+                    porProducto[idComponente] = (
+                        porProducto.get(idComponente, 0) + unidades
+                    )
+            else:
+                cantidadProductos += cantidad
+                porProducto[idProducto] = \
+                    porProducto.get(idProducto, 0) + cantidad
+
+        productoMasVendido = None
+        if porProducto:
+            idTop = max(porProducto, key=porProducto.get)
+            productoMasVendido = (
+                idTop, self._bd.productos[idTop][2], porProducto[idTop],
+            )
+        comboMasVendido = None
+        if porCombo:
+            idTop = max(porCombo, key=porCombo.get)
+            comboMasVendido = (
+                idTop, self._bd.productos[idTop][2], porCombo[idTop],
+            )
+
+        return {
+            "totalEntradas": totalEntradas,
+            "totalSalidas": totalSalidas,
+            "cantidadProductosVendidos": cantidadProductos,
+            "cantidadCombosVendidos": cantidadCombos,
+            "cantidadGastos": len(gastos),
+            "productoMasVendido": productoMasVendido,
+            "comboMasVendido": comboMasVendido,
+        }

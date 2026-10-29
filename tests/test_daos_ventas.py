@@ -262,3 +262,83 @@ def test_cu14_soloLimpiaLaSesionIndicada(bdTemporal):
     assert ventaDAO().verVentas(idSesionB) == [
         (ventaB, "t1", [(idB, 1, 100.0)])
     ]
+
+
+# ---------------------------------------------------------------------------
+# MJ2: estadísticas básicas (obtenerEstadisticas)
+# ---------------------------------------------------------------------------
+
+def test_mj2_estadisticasSinMovimientos(bdTemporal, sesionId):
+    """MJ2: sin movimientos todos los indicadores son cero/None."""
+    stats = ventaDAO().obtenerEstadisticas(sesionId)
+
+    assert stats["totalEntradas"] == 0.0
+    assert stats["totalSalidas"] == 0.0
+    assert stats["cantidadProductosVendidos"] == 0
+    assert stats["cantidadCombosVendidos"] == 0
+    assert stats["cantidadGastos"] == 0
+    assert stats["productoMasVendido"] is None
+    assert stats["comboMasVendido"] is None
+
+
+def test_mj2_estadisticasConVentasGastosYReingresos(bdTemporal, sesionId,
+                                                   catalogo):
+    """MJ2: entradas/salidas/cantidades con ventas, gastos y reingresos."""
+    idA, idB = catalogo["A"], catalogo["B"]
+    ventaDAO().registrarVenta(
+        sesionId, "t1", [(idA, 2, 100.0), (idB, 1, 200.0)],
+        400.0, 900.0,
+    )
+    # Montos firmados: negativo = gasto, positivo = reinserción.
+    ventaDAO().registrarGasto(
+        sesionId, "Gasto", -100.0, "x", "t2", 800.0,
+    )
+    ventaDAO().registrarGasto(
+        sesionId, "Reingreso", 50.0, "y", "t3", 850.0,
+    )
+
+    stats = ventaDAO().obtenerEstadisticas(sesionId)
+
+    # Entradas = 400 (venta) + 50 (reingreso) = 450.
+    assert stats["totalEntradas"] == 450.0
+    # Salidas = |-100| = 100.
+    assert stats["totalSalidas"] == 100.0
+    assert stats["cantidadProductosVendidos"] == 3
+    assert stats["cantidadCombosVendidos"] == 0
+    assert stats["cantidadGastos"] == 2
+    # Producto más vendido: A (2) por sobre B (1).
+    assert stats["productoMasVendido"][0] == idA
+    assert stats["productoMasVendido"][2] == 2
+    assert stats["comboMasVendido"] is None
+
+
+def test_mj2_estadisticasConCombosAcumulanComponentes(bdTemporal, sesionId,
+                                                      catalogo):
+    """MJ2: al vender combos, los componentes suman a 'productos vendidos'."""
+    idA, idB = catalogo["A"], catalogo["B"]
+    # Combo = 2 unidades de A + 1 unidad de B.
+    idCombo = prodDAO().crearCombo(
+        sesionId, "Combo AB", 250.0,
+        [(idA, 2), (idB, 1)],
+    )
+    # Se venden 2 combos y una unidad directa de A.
+    ventaDAO().registrarVenta(
+        sesionId, "t1", [(idCombo, 2, 250.0)], 500.0, 1000.0,
+    )
+    ventaDAO().registrarVenta(
+        sesionId, "t2", [(idA, 1, 100.0)], 100.0, 1100.0,
+    )
+
+    stats = ventaDAO().obtenerEstadisticas(sesionId)
+
+    assert stats["totalEntradas"] == 600.0
+    assert stats["totalSalidas"] == 0.0
+    # Directas de A: 1. Vía combos: A 2*2=4 + B 2*1=2 => 6. Total 7.
+    assert stats["cantidadProductosVendidos"] == 7
+    assert stats["cantidadCombosVendidos"] == 2
+    # A es el más vendido: 1 directa + 4 en combos = 5.
+    assert stats["productoMasVendido"][0] == idA
+    assert stats["productoMasVendido"][2] == 5
+    # Único combo vendido con 2 unidades.
+    assert stats["comboMasVendido"][0] == idCombo
+    assert stats["comboMasVendido"][2] == 2

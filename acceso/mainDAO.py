@@ -5,14 +5,23 @@
 # (CU1/CU2/CU3).
 #
 # Contrato acordado (definido por el Agente 3):
-#   * crearSesion(passHash, fechaInicio, cajas=None) -> int
+#   * crearSesion(passHash, fechaInicio, cajas=None,
+#                 preguntaSeguridad="", respuestaHash="") -> int
 #       Persiste la sesión única y devuelve su ID_sesion. COR7: el fondo
 #       inicial ya no se recibe como parámetro; se calcula como la suma de
 #       los montos de las cajas creadas (lista de (nombre, monto)). Si no
 #       se indican cajas, se crea la "Caja principal" con monto 0.
+#       MJ3: preguntaSeguridad y respuestaHash (HASHEADA por el Agente 3)
+#       se persisten para la recuperación de contraseña.
+#   * obtenerPreguntaSeguridad() -> tuple | None
+#       Devuelve (ID_sesion, Pregunta_seguridad, Respuesta_seguridad).
+#   * actualizarPass(passNuevaHash) -> bool
+#       Reemplaza la Pass de la sesión registrada (MJ3, tras superar la
+#       pregunta de seguridad). True si actualizó, False sin sesión.
 #   * obtenerSesion() -> tuple | None
-#       Devuelve (ID_sesion, Fecha_inicio, Fondo_inicial, Caja, Pass)
-#       de la sesión registrada, o None si no existe.
+#       Devuelve (ID_sesion, Fecha_inicio, Fondo_inicial, Caja, Pass,
+#       Pregunta_seguridad, Respuesta_seguridad) de la sesión
+#       registrada (MJ3), o None si no existe.
 #   * exportar(tipo, rutaDestino) -> str
 #       tipo "historial" (CU13) genera un .xlsx con las hojas Ventas,
 #       Gastos y Cajas (COR3: valor inicial/actual por caja y caja total);
@@ -98,7 +107,9 @@ class mainDAO:
         Fecha_inicio TEXT NOT NULL,
         Fondo_inicial REAL NOT NULL,
         Caja REAL NOT NULL,
-        Pass TEXT NOT NULL
+        Pass TEXT NOT NULL,
+        Pregunta_seguridad TEXT NOT NULL DEFAULT '',
+        Respuesta_seguridad TEXT NOT NULL DEFAULT ''
     );
 
     CREATE TABLE IF NOT EXISTS Caja (
@@ -210,6 +221,15 @@ class mainDAO:
                 ("GastoSecundario", "ID_caja",
                  "ALTER TABLE GastoSecundario ADD COLUMN "
                  "ID_caja INTEGER REFERENCES Caja(ID_caja)"),
+                # Migración MJ3: pregunta y respuesta de seguridad para la
+                # recuperación de credenciales. DEFAULT '' mantiene
+                # compatibles los datos históricos.
+                ("Sesion", "Pregunta_seguridad",
+                 "ALTER TABLE Sesion ADD COLUMN "
+                 "Pregunta_seguridad TEXT NOT NULL DEFAULT ''"),
+                ("Sesion", "Respuesta_seguridad",
+                 "ALTER TABLE Sesion ADD COLUMN "
+                 "Respuesta_seguridad TEXT NOT NULL DEFAULT ''"),
             )
             for nombreTabla, nombreColumna, ddl in _migracionColumnas:
                 columnas = {
@@ -241,7 +261,9 @@ class mainDAO:
         raise PersistenceError(f"Error de persistencia: {err}") from err
 
     @staticmethod
-    def crearSesion(passHash: str, fechaInicio: str, cajas=None) -> int:
+    def crearSesion(passHash: str, fechaInicio: str, cajas=None,
+                    preguntaSeguridad: str = "",
+                    respuestaHash: str = "") -> int:
         """Persiste la sesión única y devuelve su ID_sesion (CU1).
 
         La sesión es única en la base: el controlador valida antes de
@@ -253,6 +275,13 @@ class mainDAO:
                 de la sesión (Fondo_inicial/Caja) se calcula como la suma
                 de los montos de estas cajas. Si no se pasa o viene vacía,
                 se crea la "Caja principal" con monto 0.
+            preguntaSeguridad: MJ3. Pregunta de seguridad para recuperar
+                la contraseña en caso de olvido. Se pide obligatoriamente
+                al crear la sesión; el default "" preserva el contrato
+                previo (bases/tests que no usan la mejora).
+            respuestaHash: MJ3. Respuesta de seguridad HASHEADA por el
+                Agente 3 (misma convención que passHash). Nunca se guarda
+                en texto plano.
         """
         mainDAO.conectar()
         try:
@@ -261,9 +290,11 @@ class mainDAO:
                 sum(monto for _, monto in (cajas or [])), 2
             )
             mainDAO.cursor.execute(
-                "INSERT INTO Sesion (Fecha_inicio, Fondo_inicial, Caja, Pass) "
-                "VALUES (?, ?, ?, ?)",
-                (fechaInicio, totalInicial, totalInicial, passHash),
+                "INSERT INTO Sesion (Fecha_inicio, Fondo_inicial, Caja, "
+                "Pass, Pregunta_seguridad, Respuesta_seguridad) "
+                "VALUES (?, ?, ?, ?, ?, ?)",
+                (fechaInicio, totalInicial, totalInicial, passHash,
+                 preguntaSeguridad, respuestaHash),
             )
             idSesion = mainDAO.cursor.lastrowid
             # MJ1 (N cajas): la sesión arranca con las cajas indicadas o,
@@ -285,16 +316,62 @@ class mainDAO:
     def obtenerSesion():
         """Devuelve la sesión registrada o None si no existe (CU2).
 
-        Tupla cruda: (ID_sesion, Fecha_inicio, Fondo_inicial, Caja, Pass).
+        Tupla cruda (MJ3): (ID_sesion, Fecha_inicio, Fondo_inicial, Caja,
+        Pass, Pregunta_seguridad, Respuesta_seguridad).
         """
         mainDAO.conectar()
         try:
             mainDAO.cursor.execute(
-                "SELECT ID_sesion, Fecha_inicio, Fondo_inicial, Caja, Pass "
+                "SELECT ID_sesion, Fecha_inicio, Fondo_inicial, Caja, "
+                "Pass, Pregunta_seguridad, Respuesta_seguridad "
                 "FROM Sesion ORDER BY ID_sesion LIMIT 1"
             )
             fila = mainDAO.cursor.fetchone()
             return tuple(fila) if fila is not None else None
+        except sqlite3.Error as err:
+            mainDAO._manejarError(err)
+
+    @staticmethod
+    def obtenerPreguntaSeguridad():
+        """Devuelve la pregunta y respuesta de seguridad de la sesión (MJ3).
+
+        Tupla cruda: (ID_sesion, Pregunta_seguridad, Respuesta_seguridad).
+        None si no hay sesión registrada. La respuesta sale HASHEADA
+        (nunca en texto plano); la comparación la realiza el Agente 3.
+        """
+        mainDAO.conectar()
+        try:
+            mainDAO.cursor.execute(
+                "SELECT ID_sesion, Pregunta_seguridad, Respuesta_seguridad "
+                "FROM Sesion ORDER BY ID_sesion LIMIT 1"
+            )
+            fila = mainDAO.cursor.fetchone()
+            return tuple(fila) if fila is not None else None
+        except sqlite3.Error as err:
+            mainDAO._manejarError(err)
+
+    @staticmethod
+    def actualizarPass(passNuevaHash: str) -> bool:
+        """Reemplaza la contraseña de la sesión registrada (MJ3).
+
+        Se usa tras superar la pregunta de seguridad (restablecimiento de
+        contraseña). Devuelve True si actualizó la Pass, False si no hay
+        una sesión registrada. La Pass debe llegar HASHEADA por el Agente 3
+        (misma convención que crearSesion).
+        """
+        mainDAO.conectar()
+        try:
+            mainDAO.cursor.execute(
+                "UPDATE Sesion SET Pass = ? "
+                "WHERE ID_sesion = ("
+                "SELECT ID_sesion FROM Sesion ORDER BY ID_sesion LIMIT 1"
+                ")",
+                (passNuevaHash,),
+            )
+            if mainDAO.cursor.rowcount == 0:
+                return False
+            mainDAO.conn.commit()
+            return True
         except sqlite3.Error as err:
             mainDAO._manejarError(err)
 
@@ -414,7 +491,8 @@ class mainDAO:
         una fila por gasto/reinserción (fecha y hora, nombre,
         descripción y monto). Hoja "Cajas" (COR3): por cada caja su
         valor inicial (Fondo_inicial), valor actual (Monto) y la caja
-        total (suma de Montos). Espejo del historial de la UI (spec.md).
+        total (suma de Montos). Hoja "Estadísticas" (MJ2): las 7 métricas
+        básicas de la sesión. Espejo del historial de la UI (spec.md).
         """
         idSesion = mainDAO.obtenerSesion()[0]
         try:
@@ -475,6 +553,45 @@ class mainDAO:
         cajaTotal = round(mainDAO.verTotalCajas(idSesion), 2)
         if cajas:
             hojaCajas.append(["Caja total", None, None, cajaTotal])
+
+        # MJ2: estadísticas básicas de la sesión en una hoja propia.
+        # El import es perezoso para evitar dependencia circular
+        # (ventaDAO importa mainDAO a nivel de módulo).
+        from acceso.ventaDAO import ventaDAO as ventaDAOReal
+        estadisticas = ventaDAOReal().obtenerEstadisticas(idSesion)
+        productoMasVendido = estadisticas["productoMasVendido"]
+        comboMasVendido = estadisticas["comboMasVendido"]
+
+        hojaEstadisticas = libro.create_sheet("Estadísticas")
+        hojaEstadisticas.append(["Indicador", "Valor"])
+        hojaEstadisticas.append([
+            "Total de entradas $", estadisticas["totalEntradas"],
+        ])
+        hojaEstadisticas.append([
+            "Total de salidas $", estadisticas["totalSalidas"],
+        ])
+        hojaEstadisticas.append([
+            "Cantidad de productos vendidos",
+            estadisticas["cantidadProductosVendidos"],
+        ])
+        hojaEstadisticas.append([
+            "Cantidad de combos vendidos",
+            estadisticas["cantidadCombosVendidos"],
+        ])
+        hojaEstadisticas.append([
+            "Cantidad de gastos/reingresos registrados",
+            estadisticas["cantidadGastos"],
+        ])
+        hojaEstadisticas.append([
+            "Producto más vendido",
+            f"{productoMasVendido[1]} ({productoMasVendido[2]})"
+            if productoMasVendido is not None else "Sin registros",
+        ])
+        hojaEstadisticas.append([
+            "Combo más vendido",
+            f"{comboMasVendido[1]} ({comboMasVendido[2]})"
+            if comboMasVendido is not None else "Sin registros",
+        ])
 
         ruta = mainDAO._resolverRutaSalida(
             rutaDestino, ".xlsx", "historial"
