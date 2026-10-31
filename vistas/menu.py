@@ -35,7 +35,9 @@ class Aplicacion(ctk.CTk):
         self.controlador = controlador
 
         self.title("Plato a Plato")
-        self.geometry(f"{ANCHO_VENTANA}x{ALTO_VENTANA}")
+        # COR6: ventana centrada para que la pantalla de inicio se vea
+        # completa a cualquier resolución.
+        self._centrarVentana()
         self.minsize(900, 560)
         self.configure(fg_color=estilos.FONDO)
 
@@ -49,6 +51,19 @@ class Aplicacion(ctk.CTk):
 
         # Pantalla inicial: gestor de sesión.
         self.mostrarLogin()
+
+    # ------------------------------------------------------------------
+    # Ventana
+    # ------------------------------------------------------------------
+    def _centrarVentana(self):
+        """Centra la ventana en el monitor (COR6).
+
+        Sin esto la pantalla de inicio puede quedar descolgada o cortarse
+        según la resolución del monitor.
+        """
+        x = max(0, (self.winfo_screenwidth() - ANCHO_VENTANA) // 2)
+        y = max(0, (self.winfo_screenheight() - ALTO_VENTANA) // 2)
+        self.geometry(f"{ANCHO_VENTANA}x{ALTO_VENTANA}+{x}+{y}")
 
     # ------------------------------------------------------------------
     # Recursos

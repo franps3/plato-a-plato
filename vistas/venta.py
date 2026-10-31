@@ -468,7 +468,10 @@ class VistaVenta(ctk.CTkFrame):
         self.popupGasto = ctk.CTkToplevel(self)
         self.popupGasto.title("Registrar Gasto")
         self.popupGasto.configure(fg_color=estilos.FONDO)
-        self.popupGasto.geometry("460x430")
+        # COR9: alto ampliado para que los botones Registrar/Cancelar se
+        # muestren completos (el formulario con el selector de caja MJ1 los
+        # recortaba en el popup original de 430px de alto).
+        self.popupGasto.geometry("460x560")
         self.popupGasto.resizable(False, False)
         self.popupGasto.transient(self.winfo_toplevel())
 

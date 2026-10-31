@@ -68,33 +68,37 @@ class ServVenta:
         idsCombos = set()
         if self.prodDAO is not None:
             idsCombos = {c[0] for c in self.prodDAO.verCombos(idSesion)}
+
+        # COR8: se agrega la demanda de todos los ítems (combos expandidos a
+        # sus componentes) para validar el stock combinado antes de persistir.
+        # Así no se permite vender más unidades de las disponibles aunque haya
+        # varios combos o productos que compartan componentes.
+        demanda = {}
         for detalle in detalles:
-            if detalle.idProducto in idsCombos:
-                # Combo: validar stock de cada componente.
+            if detalle.idProducto in idsCombos and self.prodDAO is not None:
                 componentes = self.prodDAO.verComponentesCombo(
                     detalle.idProducto
                 )
                 for idComp, cantComp in componentes:
-                    stockComp = self.stockDAO.verStock(idComp)
-                    if stockComp is None:
-                        raise ProductoNoEncontrado(
-                            "No se encontró un componente del combo."
-                        )
-                    if stockComp < detalle.cantidad * cantComp:
-                        raise StockInsuficiente(
-                            f"Stock insuficiente del componente {idComp} "
-                            f"para el combo {detalle.idProducto}."
-                        )
+                    demanda[idComp] = (
+                        demanda.get(idComp, 0)
+                        + detalle.cantidad * cantComp
+                    )
             else:
-                stock = self.stockDAO.verStock(detalle.idProducto)
-                if stock is None:
-                    raise ProductoNoEncontrado(
-                        "No se encontró el producto solicitado."
-                    )
-                if stock < detalle.cantidad:
-                    raise StockInsuficiente(
-                        f"Stock insuficiente para el producto {detalle.idProducto}."
-                    )
+                demanda[detalle.idProducto] = (
+                    demanda.get(detalle.idProducto, 0) + detalle.cantidad
+                )
+
+        for idProducto, cantidad in demanda.items():
+            stock = self.stockDAO.verStock(idProducto)
+            if stock is None:
+                raise ProductoNoEncontrado(
+                    "No se encontró el producto solicitado."
+                )
+            if stock < cantidad:
+                raise StockInsuficiente(
+                    f"Stock insuficiente para el producto {idProducto}."
+                )
 
         montoNeto = round(
             sum(detalle.monto for detalle in detalles), 2

@@ -243,18 +243,49 @@ class FakeProdDAO:
 
 
 class FakeStockDAO:
-    """Falso DAO de stock (misma tabla Producto del estado compartido)."""
+    """Falso DAO de stock (misma tabla Producto del estado compartido).
+
+    Replica COR8: los combos no tienen stock propio; su disponibilidad se
+    deriva del stock de sus componentes (MIN(Stock // Cantidad)) y el
+    descuento de un combo se aplica sobre los productos asociados.
+    """
 
     def __init__(self, bd=None):
         self._bd = bd if bd is not None else FakeBD()
 
+    def _es_combo(self, idProducto):
+        return idProducto in self._bd.combos
+
     def verStock(self, idProducto):
-        """Devuelve el stock del producto o None si no existe."""
+        """Devuelve el stock del producto o None si no existe.
+
+        COR8: si es un combo, devuelve cuantos combos se pueden armar con
+        el stock actual de sus componentes.
+        """
         p = self._bd.productos.get(idProducto)
-        return None if p is None else p[4]
+        if p is None:
+            return None
+        if idProducto not in self._bd.combos:
+            return p[4]
+        componentes = self._bd.detalleCombo.get(idProducto, [])
+        if not componentes:
+            return 0
+        minimos = []
+        for idComp, cantidad in componentes:
+            comp = self._bd.productos.get(idComp)
+            if comp is None:
+                return 0
+            minimos.append(comp[4] // cantidad)
+        return min(minimos) if minimos else 0
 
     def editarStock(self, idProducto, stock):
-        """Actualiza el stock; devuelve el nuevo valor o None si no existe."""
+        """Actualiza el stock; devuelve el nuevo valor o None si no existe.
+
+        COR8: los combos no tienen stock propio, por lo que editarStock sobre
+        un combo devuelve None sin tocar el estado.
+        """
+        if idProducto in self._bd.combos:
+            return None
         p = self._bd.productos.get(idProducto)
         if p is None:
             return None
@@ -262,13 +293,23 @@ class FakeStockDAO:
         return stock
 
     def descontar(self, idProducto, cantidad):
-        """Resta cantidad al stock (sin validar); devuelve el resto o None."""
-        p = self._bd.productos.get(idProducto)
-        if p is None:
+        """Resta cantidad al stock (sin validar); devuelve el resto o None.
+
+        COR8: si es un combo, descuenta de cada componente asociado
+        (cantidad * requerido en DetalleCombo) y devuelve la disponibilidad
+        restante del combo.
+        """
+        if idProducto not in self._bd.productos:
             return None
+        if idProducto in self._bd.combos:
+            for idComp, cantComp in self._bd.detalleCombo.get(idProducto, []):
+                comp = self._bd.productos.get(idComp)
+                if comp is not None:
+                    comp[4] -= cantidad * cantComp
+            return self.verStock(idProducto)
+        p = self._bd.productos[idProducto]
         p[4] -= cantidad
         return p[4]
-
 
 
 class FakeVentaDAO:

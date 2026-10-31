@@ -254,7 +254,11 @@ class VistaConfigProductos(ctk.CTkFrame):
             ).pack(pady=18)
 
     def _crearFilaCombo(self, combo):
-        """Crea la tarjeta de un combo: nombre, componentes, stock y precio."""
+        """Crea la tarjeta de un combo: nombre, componentes y precio (MJ4).
+
+        COR8: el badge muestra la disponibilidad derivada del stock de los
+        componentes (el combo ya no tiene stock propio).
+        """
         idCombo, nombre, precio = combo
 
         # Texto de componentes con nombres resueltos (MJ4).
@@ -266,11 +270,12 @@ class VistaConfigProductos(ctk.CTkFrame):
             partes.append(f"{nombreProducto} x{cantidad}")
         textoComponentes = "  ·  ".join(partes) or "Sin componentes"
 
-        # Stock del combo (el combo es un Producto con Es_combo=1).
+        # COR8: el combo no tiene stock propio; el controlador devuelve
+        # cuántos combos se pueden armar hoy con el stock de los componentes.
         stock = 0
         producto = self._mapaProductos.get(idCombo)
         if producto is not None:
-            stock = producto.stock
+            stock = producto.stock or 0
 
         fila = ctk.CTkFrame(
             self.panel, fg_color=estilos.FILA,
@@ -674,7 +679,7 @@ class VistaConfigProductos(ctk.CTkFrame):
         self.popupCombo = ctk.CTkToplevel(self)
         self.popupCombo.title("Modificar Combo" if editando else "Añadir Combo")
         self.popupCombo.configure(fg_color=estilos.FONDO)
-        self.popupCombo.geometry("560x650")
+        self.popupCombo.geometry("560x600")
         self.popupCombo.resizable(False, False)
         self.popupCombo.transient(self.winfo_toplevel())
         self.popupCombo.grab_set()
@@ -691,7 +696,9 @@ class VistaConfigProductos(ctk.CTkFrame):
         ).pack(pady=(16, 4))
         ctk.CTkLabel(
             tarjeta, text="Combiná uno o más productos con su cantidad "
-                          "y asignale un precio.",
+                          "y asignale un precio. El combo no tiene stock "
+                          "propio: su disponibilidad depende del stock "
+                          "de sus componentes.",
             font=estilos.F_PEQUENA, text_color=estilos.TEXTO_TENUE,
             wraplength=480, justify="center",
         ).pack(pady=(0, 12))
@@ -708,36 +715,19 @@ class VistaConfigProductos(ctk.CTkFrame):
         )
         self.comboNombre.pack(fill="x", padx=20, pady=(2, 8))
 
-        # Precio (y stock inicial sólo al crear).
-        filaPrecio = ctk.CTkFrame(tarjeta, fg_color="transparent")
-        filaPrecio.pack(fill="x", padx=20, pady=(0, 8))
-        marcoPrecio = ctk.CTkFrame(filaPrecio, fg_color="transparent")
-        marcoPrecio.pack(side="left", fill="x", expand=True, padx=(0, 6))
+        # COR8: el combo NO tiene stock propio (se eliminó el campo
+        # "Stock inicial"); su disponibilidad se deriva del stock de los
+        # productos que lo componen.
         ctk.CTkLabel(
-            marcoPrecio, text="Precio", font=estilos.F_BOLD,
+            tarjeta, text="Precio", font=estilos.F_BOLD,
             text_color=estilos.TEXTO_CLARO, anchor="w",
-        ).pack(fill="x")
+        ).pack(fill="x", padx=20)
         self.comboPrecio = ctk.CTkEntry(
-            marcoPrecio, font=estilos.F_NORMAL, height=36,
+            tarjeta, font=estilos.F_NORMAL, height=36,
             fg_color=estilos.ENTRADA, text_color=estilos.ENTRADA_TEXTO,
             corner_radius=estilos.RADIO, placeholder_text="Ej.: 2.500",
         )
-        self.comboPrecio.pack(fill="x", pady=(2, 0))
-
-        self.comboStock = None
-        if not editando:
-            marcoStock = ctk.CTkFrame(filaPrecio, fg_color="transparent")
-            marcoStock.pack(side="left", fill="x", expand=True, padx=(6, 0))
-            ctk.CTkLabel(
-                marcoStock, text="Stock inicial", font=estilos.F_BOLD,
-                text_color=estilos.TEXTO_CLARO, anchor="w",
-            ).pack(fill="x")
-            self.comboStock = ctk.CTkEntry(
-                marcoStock, font=estilos.F_NORMAL, height=36,
-                fg_color=estilos.ENTRADA, text_color=estilos.ENTRADA_TEXTO,
-                corner_radius=estilos.RADIO, placeholder_text="Ej.: 20",
-            )
-            self.comboStock.pack(fill="x", pady=(2, 0))
+        self.comboPrecio.pack(fill="x", padx=20, pady=(2, 8))
 
         # Componentes: lista de productos base con entrada de Cantidad.
         ctk.CTkLabel(
@@ -826,11 +816,8 @@ class VistaConfigProductos(ctk.CTkFrame):
         """Guarda el combo (alta o modificación, MJ4) con sus componentes."""
         nombre = self.comboNombre.get().strip()
         precio = self._parsearPrecio(self.comboPrecio.get())
-        stock = 0
-        if self.comboStock is not None:
-            stockParseado = self._parsearStock(self.comboStock.get())
-            stock = stockParseado if stockParseado is not None else 0
-
+        # COR8: los combos no tienen stock propio; sólo se validan nombre,
+        # precio y componentes.
         componentes = []
         for idProducto, entry in self._entriesCantidad.items():
             cantidad = self._parsearStock(entry.get()) or 0
@@ -848,19 +835,12 @@ class VistaConfigProductos(ctk.CTkFrame):
                 "El combo debe incluir al menos un producto con cantidad > 0."
             )
             return
-        if self.comboStock is not None and stock < 0:
-            self._alerta("El stock inicial debe ser mayor o igual a cero.")
-            return
 
         if self.comboEditando is None:
             resultado = self.controlador.crearCombo(
                 nombre, precio, componentes
             )
             if resultado["ok"]:
-                idCombo = resultado["datos"]
-                # El combo es un Producto: se le asigna su stock inicial (MJ4).
-                if stock > 0:
-                    self.controlador.editarStock(idCombo, stock)
                 self._cerrarPopupCombo()
                 self.refrescarCombos()
                 self._informar("Combo creado correctamente.")

@@ -2,7 +2,8 @@
 # Pantalla del Gestor de Sesión del sistema "Plato a Plato".
 #
 # Atiende:
-#   * CU1 Crear sesión: asigna contraseña y monto inicial (fondo/vuelto).
+#   * CU1 Crear sesión: asigna contraseña; el fondo inicial es la suma de
+#     los montos de las cajas creadas (COR7).
 #   * CU2 Iniciar sesión: ingresa la credencial y desbloquea la interfaz.
 #   * CU3 Cerrar sesión: se dispara desde el botón Home del shell (menu.py).
 #
@@ -54,9 +55,11 @@ class VistaLogin(ctk.CTkFrame):
     # ------------------------------------------------------------------
     def _construir(self):
         """Arma la tarjeta central con el formulario de sesión."""
+        # COR6: tarjeta un poco más ancha para mejorar legibilidad y que el
+        # formulario completo se vea bien centrado a cualquier resolución.
         tarjeta = ctk.CTkFrame(
             self, fg_color=estilos.FONDO_PANEL,
-            corner_radius=estilos.RADIO, width=420,
+            corner_radius=estilos.RADIO, width=460,
         )
         tarjeta.place(relx=0.5, rely=0.5, anchor="center")
 
@@ -84,19 +87,6 @@ class VistaLogin(ctk.CTkFrame):
         )
         self.entradaPass.pack(padx=40, pady=(4, 14), fill="x")
 
-        # Campo de fondo inicial (sólo visible al crear sesión).
-        self.marcoFondo = ctk.CTkFrame(tarjeta, fg_color="transparent")
-        ctk.CTkLabel(
-            self.marcoFondo, text="Fondo inicial (vuelto)", font=estilos.F_BOLD,
-            text_color=estilos.TEXTO_CLARO, anchor="w",
-        ).pack(fill="x")
-        self.entradaFondo = ctk.CTkEntry(
-            self.marcoFondo, font=estilos.F_NORMAL, height=40,
-            fg_color=estilos.ENTRADA, text_color=estilos.ENTRADA_TEXTO,
-            corner_radius=estilos.RADIO, placeholder_text="Ej.: 5000",
-        )
-        self.entradaFondo.pack(pady=(4, 0), fill="x")
-
         # --- Cajas / medios de pago (MJ1): opcional, sólo al crear sesión ---
         self.marcoCajas = ctk.CTkFrame(tarjeta, fg_color="transparent")
         ctk.CTkLabel(
@@ -105,11 +95,11 @@ class VistaLogin(ctk.CTkFrame):
         ).pack(fill="x")
         ctk.CTkLabel(
             self.marcoCajas,
-            text="La suma de las cajas debe coincidir con el fondo "
-                 "inicial. Si no agregás cajas se usará la \"Caja "
-                 "principal\".",
+            text="El fondo inicial de la sesión será la suma de los "
+                 "montos de las cajas agregadas. Si no agregás cajas "
+                 "se usará la \"Caja principal\".",
             font=estilos.F_PEQUENA, text_color=estilos.TEXTO_TENUE,
-            justify="left", anchor="w", wraplength=340,
+            justify="left", anchor="w", wraplength=400,
         ).pack(fill="x", pady=(0, 4))
         self.contenedorCajas = ctk.CTkFrame(
             self.marcoCajas, fg_color="transparent"
@@ -135,13 +125,9 @@ class VistaLogin(ctk.CTkFrame):
 
         # Enter dispara la acción.
         self.entradaPass.bind("<Return>", lambda _e: self._accion())
-        self.entradaFondo.bind("<Return>", lambda _e: self._accion())
 
-        # El campo de fondo inicial y el marco de cajas sólo aplican al crear.
+        # El marco de cajas sólo aplica al crear (COR7: sin campo de fondo).
         if self.modo == "crear":
-            self.marcoFondo.pack(
-                padx=40, pady=(0, 10), fill="x", before=self.botonAccion
-            )
             self.marcoCajas.pack(
                 padx=40, pady=(0, 10), fill="x", before=self.botonAccion
             )
@@ -154,16 +140,10 @@ class VistaLogin(ctk.CTkFrame):
         password = self.entradaPass.get()
 
         if self.modo == "crear":
-            fondo = self._parsearFondo(self.entradaFondo.get())
-            if fondo is None:
-                self._alerta("El fondo inicial debe ser un número válido.")
-                return
-            # MJ1: arma y valida las cajas definidas (suma == fondo inicial).
-            cajas = self._armarCajas(fondo)
-            if cajas is None:
-                return
+            # COR7: el fondo inicial es la suma de los montos de las cajas.
+            # Sin cajas, se usa la "Caja principal" (lo resuelve el modelo).
             resultado = self.controlador.crearSesion(
-                password, fondo, cajas or None
+                password, self.cajas or None
             )
         else:
             resultado = self.controlador.iniciarSesion(password)
@@ -247,7 +227,7 @@ class VistaLogin(ctk.CTkFrame):
     def _confirmarPopupCaja(self):
         """Valida y agrega la caja cargada en el popup (MJ1)."""
         nombre = self.nombreCajaEntry.get().strip()
-        monto = self._parsearFondo(self.montoCajaEntry.get())
+        monto = self._parsearMonto(self.montoCajaEntry.get())
         if not nombre:
             self._alerta("El nombre de la caja no puede ser vacío.")
             return
@@ -293,30 +273,14 @@ class VistaLogin(ctk.CTkFrame):
             self._renderCajas()
 
     # ------------------------------------------------------------------
-    # Cajas / medios de pago (MJ1): validación de la suma
-    # ------------------------------------------------------------------
-    def _armarCajas(self, fondo):
-        """Valida que las cajas definidas sumen el fondo inicial (MJ1).
-
-        Retorna la lista de (nombre, monto) o None si no coinciden.
-        """
-        if not self.cajas:
-            return []
-        suma = round(sum(monto for _, monto in self.cajas), 2)
-        if round(suma, 2) != round(float(fondo), 2):
-            self._alerta(
-                f"La suma de las cajas ({_formatoMonto(suma)}) debe "
-                f"coincidir con el fondo inicial ({_formatoMonto(fondo)})."
-            )
-            return None
-        return [(nombre, monto) for nombre, monto in self.cajas]
-
-    # ------------------------------------------------------------------
     # Conversión de entradas
     # ------------------------------------------------------------------
     @staticmethod
-    def _parsearFondo(texto):
-        """Convierte el texto del fondo a float; None si no es numérico."""
+    def _parsearMonto(texto):
+        """Convierte el texto a float; None si no es numérico.
+
+        Acepta separador de miles '.' y decimal ',' (ej.: '2.500' -> 2500).
+        """
         texto = (texto or "").strip().replace(".", "").replace(",", ".")
         if texto == "":
             return None
