@@ -372,10 +372,47 @@ class Controlador:
         """
         try:
             productos = self.servProd.verProductos(self.sesionActiva.idSesion)
+            idsCombos = {
+                c[0] for c in self.servProd.verCombos(self.sesionActiva.idSesion)
+            }
+            comboComponentes = {
+                idCombo: self.servProd.verComponentesCombo(idCombo)
+                for idCombo in idsCombos
+            }
+            reservado = {}
+            for idProducto, cantidad in self.carrito.items():
+                if idProducto not in idsCombos:
+                    reservado[idProducto] = reservado.get(idProducto, 0) + cantidad
+            for idCombo, cantidad in self.carrito.items():
+                if idCombo in idsCombos:
+                    for idComp, cantComp in comboComponentes.get(idCombo, []):
+                        reservado[idComp] = (
+                            reservado.get(idComp, 0) + cantidad * cantComp
+                        )
             for producto in productos:
-                stockReal = self.servStock.verStock(producto.idProducto)
-                reservado = self.carrito.get(producto.idProducto, 0)
-                producto.stock = max(0, stockReal - reservado)
+                if producto.idProducto in idsCombos:
+                    componentes = comboComponentes.get(producto.idProducto, [])
+                    if not componentes:
+                        producto.stock = 0
+                        continue
+                    disponibles = []
+                    for idComp, cantComp in componentes:
+                        stockComp = self.servStock.verStock(idComp)
+                        if stockComp is None:
+                            disponibles.append(0)
+                            continue
+                        restante = stockComp - reservado.get(idComp, 0)
+                        disponibles.append(max(0, restante // cantComp))
+                    producto.stock = min(disponibles) if disponibles else 0
+                else:
+                    stockReal = self.servStock.verStock(producto.idProducto)
+                    if stockReal is None:
+                        producto.stock = 0
+                    else:
+                        producto.stock = max(
+                            0,
+                            stockReal - reservado.get(producto.idProducto, 0),
+                        )
             return {
                 "ok": True,
                 "mensaje": "Catálogo actualizado.",
@@ -574,16 +611,54 @@ class Controlador:
         Retorno: {"ok": bool, "mensaje": str, "datos": int|None}
         """
         try:
-            # COR8: los combos no tienen stock propio; se salta la
-            # validación de stock (se valida al confirmar la venta).
             idsCombos = {
                 c[0]
                 for c in self.servProd.verCombos(self.sesionActiva.idSesion)
             }
-            if idProducto not in idsCombos:
+            comboComponentes = {
+                idCombo: self.servProd.verComponentesCombo(idCombo)
+                for idCombo in idsCombos
+            }
+
+            if idProducto in idsCombos:
+                # Reserva visual para combos: valida componentes.
+                reservado = {}
+                for pid, cantidad in self.carrito.items():
+                    if pid not in idsCombos:
+                        reservado[pid] = reservado.get(pid, 0) + cantidad
+                for idCombo, cantidad in self.carrito.items():
+                    if idCombo in idsCombos:
+                        for idComp, cantComp in comboComponentes.get(
+                            idCombo, []
+                        ):
+                            reservado[idComp] = (
+                                reservado.get(idComp, 0)
+                                + cantidad * cantComp
+                            )
+                for idComp, cantComp in comboComponentes.get(
+                    idProducto, []
+                ):
+                    stockComp = self.servStock.verStock(idComp)
+                    if stockComp is None:
+                        raise ProductoNoEncontrado(
+                            "No se encontró un componente del combo."
+                        )
+                    if reservado.get(idComp, 0) + cantComp > stockComp:
+                        raise StockInsuficiente(
+                            "No hay stock suficiente para agregar más unidades."
+                        )
+            else:
                 stock = self.servStock.verStock(idProducto)
                 cantidadActual = self.carrito.get(idProducto, 0)
-                if cantidadActual + 1 > stock:
+                reservadoExtra = 0
+                for idCombo, cantidad in self.carrito.items():
+                    if idCombo in idsCombos:
+                        for idComp, cantComp in comboComponentes.get(
+                            idCombo, []
+                        ):
+                            if idComp == idProducto:
+                                reservadoExtra += cantidad * cantComp
+                if cantidadActual + 1 + reservadoExtra > stock:
                     raise StockInsuficiente(
                         "No hay stock suficiente para agregar más unidades."
                     )
