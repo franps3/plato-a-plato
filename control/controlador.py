@@ -21,6 +21,7 @@ from .excepciones import (
     CajaNoEncontrada,
     CredencialInvalida,
     MontoInvalido,
+    RespuestaSeguridadInvalida,
     PasswordInvalido,
     ProductoEnCarrito,
     ProductoNoEncontrado,
@@ -114,7 +115,9 @@ class Controlador:
     # Asigna contraseña y monto inicial; inicializa la sesión generando la
     # base de datos local (caja = fondo inicial, sesión única en bd).
     # ------------------------------------------------------------------
-    def crearSesion(self, password: str, cajas=None) -> dict:
+    def crearSesion(self, password: str, cajas=None,
+                    preguntaSeguridad=None, respuestaSeguridad=None
+                    ) -> dict:
         """Crea la sesión única del sistema.
 
         Postcondición (docs/CUs.md y decisión de diseño):
@@ -134,11 +137,29 @@ class Controlador:
 
             if self.dao.obtenerSesion() is not None:
                 raise SesionYaExiste("Ya existe una sesión registrada.")
+            # MJ3: validar y hashear pregunta/respuesta de seguridad si se indican.
+            preguntaLimpia = ""
+            respuestaHash = ""
+            if preguntaSeguridad is not None or respuestaSeguridad is not None:
+                if (not isinstance(preguntaSeguridad, str)
+                        or not preguntaSeguridad.strip()):
+                    raise RespuestaSeguridadInvalida(
+                        "La pregunta de seguridad no puede estar vacÃ­a."
+                    )
+                if (not isinstance(respuestaSeguridad, str)
+                        or not respuestaSeguridad.strip()):
+                    raise RespuestaSeguridadInvalida(
+                        "La respuesta de seguridad no puede estar vacÃ­a."
+                    )
+                preguntaLimpia = preguntaSeguridad.strip()
+                respuestaHash = self.hashearPassword(respuestaSeguridad.strip())
+
 
             fechaInicio = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             passHash = self.hashearPassword(password)
             idSesion = self.dao.crearSesion(
                 passHash, fechaInicio, cajas,
+                preguntaLimpia, respuestaHash,
             )
 
             # Actualiza el estado de la sesión en el controlador.
@@ -979,3 +1000,91 @@ class Controlador:
         except AppError as err:
             log.error("%s: %s", type(err).__name__, err, exc_info=True)
             return {"ok": False, "mensaje": str(err), "datos": None}
+
+    # ------------------------------------------------------------------
+    # MJ3: recuperación de credenciales
+    # ------------------------------------------------------------------
+    def verPreguntaSeguridad(self) -> dict:
+        """Devuelve la pregunta de seguridad de la sesión (MJ3).
+
+        Nunca devuelve la respuesta (solo se usa para mostrarla al usuario).
+        """
+        try:
+            fila = self.dao.obtenerPreguntaSeguridad()
+            if fila is None:
+                raise SesionNoEncontrada(
+                    "No hay una sesión registrada."
+                )
+            _idSesion, pregunta, _respuestaHash = fila
+            return {
+                "ok": True,
+                "mensaje": "Pregunta de seguridad obtenida.",
+                "datos": {"idSesion": _idSesion, "pregunta": pregunta},
+            }
+        except AppError as err:
+            log.error("%s: %s", type(err).__name__, err, exc_info=True)
+            return {"ok": False, "mensaje": str(err), "datos": None}
+
+    def recuperarPassword(self, respuesta: str, passNueva: str) -> dict:
+        """Restablece la contraseña tras validar la respuesta de seguridad (MJ3).
+
+        Compara el hash de la respuesta con la almacenada. Si coincide,
+        hashea la nueva contraseña y la persiste vía actualizarPass.
+        """
+        try:
+            self._validarPassword(passNueva)
+
+            fila = self.dao.obtenerPreguntaSeguridad()
+            if fila is None:
+                raise SesionNoEncontrada(
+                    "No hay una sesión registrada."
+                )
+            _idSesion, _pregunta, respuestaHashGuardada = fila
+
+            if not respuesta or not isinstance(respuesta, str):
+                raise RespuestaSeguridadInvalida(
+                    "La respuesta de seguridad es obligatoria."
+                )
+            if self.hashearPassword(respuesta.strip()) != respuestaHashGuardada:
+                raise RespuestaSeguridadInvalida(
+                    "La respuesta de seguridad es incorrecta."
+                )
+
+            passNuevaHash = self.hashearPassword(passNueva)
+            actualizado = self.dao.actualizarPass(passNuevaHash)
+            if not actualizado:
+                raise SesionNoEncontrada(
+                    "No se pudo actualizar la contraseña: "
+                    "no hay una sesión registrada."
+                )
+
+            return {
+                "ok": True,
+                "mensaje": "Contraseña restablecida correctamente.",
+                "datos": None,
+            }
+        except AppError as err:
+            log.error("%s: %s", type(err).__name__, err, exc_info=True)
+            return {"ok": False, "mensaje": str(err), "datos": None}
+
+    # ------------------------------------------------------------------
+    # MJ2: estadísticas básicas
+    # ------------------------------------------------------------------
+    def verEstadisticas(self) -> dict:
+        """Devuelve las estadísticas básicas de la sesión (MJ2).
+
+        Retorno: {"ok": bool, "mensaje": str, "datos": dict|None}
+        """
+        try:
+            estadisticas = self.servVenta.obtenerEstadisticas(
+                self.sesionActiva.idSesion
+            )
+            return {
+                "ok": True,
+                "mensaje": "Estadísticas obtenidas.",
+                "datos": estadisticas,
+            }
+        except AppError as err:
+            log.error("%s: %s", type(err).__name__, err, exc_info=True)
+            return {"ok": False, "mensaje": str(err), "datos": None}
+

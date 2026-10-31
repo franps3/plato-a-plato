@@ -215,3 +215,15 @@ class ServVenta:
         Conserva productos y sesión; el stock queda intacto.
         """
         self.ventaDAO.borrarHistorial(idSesion)
+
+    # ------------------------------------------------------------------
+    # MJ2: estadísticas básicas
+    # ------------------------------------------------------------------
+    def obtenerEstadisticas(self, idSesion: int) -> dict:
+        """Devuelve las estadísticas básicas de la sesión (MJ2).
+
+        Delega la agregación SQL en ventaDAO.obtenerEstadisticas.
+        Retorna dict con totalEntradas, totalSalidas, cantidades vendidas,
+        gastos y producto/combo más vendido.
+        """
+        return self.ventaDAO.obtenerEstadisticas(idSesion)

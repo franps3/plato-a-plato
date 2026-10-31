@@ -109,3 +109,12 @@ class VentaNoEncontrada(DomainError):
 class CajaNoEncontrada(DomainError):
     """No existe la caja solicitada (ID de caja inválido)."""
     pass
+
+
+# ---------------------------------------------------------------------------
+# Errores específicos del dominio de recuperación de credenciales (MJ3)
+# ---------------------------------------------------------------------------
+
+class RespuestaSeguridadInvalida(DomainError):
+    """La respuesta de seguridad es inválida o no coincide con la guardada."""
+    pass
