@@ -24,7 +24,7 @@ from .iconos import obtenerIconos
 
 # Ancho/alto de la ventana raíz.
 ANCHO_VENTANA = 1080
-ALTO_VENTANA = 620
+ALTO_VENTANA = 760
 
 
 class Aplicacion(ctk.CTk):
@@ -38,7 +38,7 @@ class Aplicacion(ctk.CTk):
         # COR6: ventana centrada para que la pantalla de inicio se vea
         # completa a cualquier resolución.
         self._centrarVentana()
-        self.minsize(900, 560)
+        self.minsize(900, 680)
         self.configure(fg_color=estilos.FONDO)
 
         # Estado de navegación.

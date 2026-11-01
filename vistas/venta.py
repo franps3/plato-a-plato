@@ -419,6 +419,7 @@ class VistaVenta(ctk.CTkFrame):
         """Resta una unidad desde el popup (CU9); cierra si queda vacío."""
         self.controlador.quitarProd(producto.idProducto)
         if not self.controlador.carrito:
+            self.refrescarProductos()
             self._cerrarCarrito()
             return
         # COR2: al liberar unidades, el stock DISPONIBLE vuelve a subir.
@@ -430,6 +431,7 @@ class VistaVenta(ctk.CTkFrame):
         Agente 2) y cierra el popup si el carrito queda vacío."""
         self.controlador.quitarProdCompleto(producto.idProducto)
         if not self.controlador.carrito:
+            self.refrescarProductos()
             self._cerrarCarrito()
             return
         # COR2: al liberar unidades, el stock DISPONIBLE vuelve a subir.
