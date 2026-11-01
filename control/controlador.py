@@ -144,12 +144,12 @@ class Controlador:
                 if (not isinstance(preguntaSeguridad, str)
                         or not preguntaSeguridad.strip()):
                     raise RespuestaSeguridadInvalida(
-                        "La pregunta de seguridad no puede estar vacÃ­a."
+                        "La pregunta de seguridad no puede estar vacía."
                     )
                 if (not isinstance(respuestaSeguridad, str)
                         or not respuestaSeguridad.strip()):
                     raise RespuestaSeguridadInvalida(
-                        "La respuesta de seguridad no puede estar vacÃ­a."
+                        "La respuesta de seguridad no puede estar vacía."
                     )
                 preguntaLimpia = preguntaSeguridad.strip()
                 respuestaHash = self.hashearPassword(respuestaSeguridad.strip())

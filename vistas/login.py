@@ -87,7 +87,32 @@ class VistaLogin(ctk.CTkFrame):
         )
         self.entradaPass.pack(padx=40, pady=(4, 14), fill="x")
 
-        # --- Cajas / medios de pago (MJ1): opcional, sólo al crear sesión ---
+        # --- Pregunta de seguridad (MJ3): obligatoria al crear sesión ---
+        self.marcoSeguridad = ctk.CTkFrame(tarjeta, fg_color="transparent")
+        ctk.CTkLabel(
+            self.marcoSeguridad, text="Pregunta de seguridad", font=estilos.F_BOLD,
+            text_color=estilos.TEXTO_CLARO, anchor="w",
+        ).pack(fill="x")
+        ctk.CTkLabel(
+            self.marcoSeguridad,
+            text="Se usará para restablecer la contraseña si la olvidás.",
+            font=estilos.F_PEQUENA, text_color=estilos.TEXTO_TENUE,
+            justify="left", anchor="w", wraplength=400,
+        ).pack(fill="x", pady=(0, 4))
+        self.entradaPregunta = ctk.CTkEntry(
+            self.marcoSeguridad, font=estilos.F_NORMAL, height=40,
+            fg_color=estilos.ENTRADA, text_color=estilos.ENTRADA_TEXTO,
+            corner_radius=estilos.RADIO,
+            placeholder_text="Ej.: ¿Cuál es tu comida favorita?",
+        )
+        self.entradaPregunta.pack(fill="x", pady=(0, 8))
+        self.entradaRespuesta = ctk.CTkEntry(
+            self.marcoSeguridad, font=estilos.F_NORMAL, height=40,
+            fg_color=estilos.ENTRADA, text_color=estilos.ENTRADA_TEXTO,
+            corner_radius=estilos.RADIO, show="*",
+            placeholder_text="Respuesta de seguridad",
+        )
+        self.entradaRespuesta.pack(fill="x", pady=(0, 4))
         self.marcoCajas = ctk.CTkFrame(tarjeta, fg_color="transparent")
         ctk.CTkLabel(
             self.marcoCajas, text="Cajas / medios de pago (opcional)",
@@ -126,8 +151,20 @@ class VistaLogin(ctk.CTkFrame):
         # Enter dispara la acción.
         self.entradaPass.bind("<Return>", lambda _e: self._accion())
 
-        # El marco de cajas sólo aplica al crear (COR7: sin campo de fondo).
+        # En modo ingresar: opción de recuperar contraseña (MJ3).
+        if self.modo == "ingresar":
+            ctk.CTkButton(
+                tarjeta, text="¿Olvidaste tu contraseña?", font=estilos.F_PEQUENA,
+                fg_color="transparent", hover_color=estilos.BOTON_BARRA_HOVER,
+                text_color=estilos.TEXTO_TENUE, height=28,
+                command=self._abrirRecuperacion,
+            ).pack(padx=40, pady=(0, 8), anchor="e")
+
+        # El marco de seguridad y de cajas sólo aplican al crear (COR7/MJ3).
         if self.modo == "crear":
+            self.marcoSeguridad.pack(
+                padx=40, pady=(0, 10), fill="x", before=self.botonAccion
+            )
             self.marcoCajas.pack(
                 padx=40, pady=(0, 10), fill="x", before=self.botonAccion
             )
@@ -141,9 +178,11 @@ class VistaLogin(ctk.CTkFrame):
 
         if self.modo == "crear":
             # COR7: el fondo inicial es la suma de los montos de las cajas.
-            # Sin cajas, se usa la "Caja principal" (lo resuelve el modelo).
+            # MJ3: pregunta y respuesta de seguridad obligatorias.
             resultado = self.controlador.crearSesion(
-                password, self.cajas or None
+                password, self.cajas or None,
+                preguntaSeguridad=self.entradaPregunta.get(),
+                respuestaSeguridad=self.entradaRespuesta.get(),
             )
         else:
             resultado = self.controlador.iniciarSesion(password)
@@ -272,8 +311,79 @@ class VistaLogin(ctk.CTkFrame):
             self.cajas.pop(idx)
             self._renderCajas()
 
-    # ------------------------------------------------------------------
-    # Conversión de entradas
+    def _abrirRecuperacion(self):
+        """Abre el popup para restablecer la contraseña (MJ3)."""
+        resultado = self.controlador.verPreguntaSeguridad()
+        if not resultado["ok"]:
+            self._alerta(resultado["mensaje"])
+            return
+        pregunta = (resultado["datos"] or {}).get("pregunta", "")
+        if not pregunta:
+            self._alerta("No hay pregunta de seguridad registrada.")
+            return
+
+        popup = ctk.CTkToplevel(self)
+        popup.title("Recuperar contraseña")
+        popup.configure(fg_color=estilos.FONDO)
+        popup.geometry("420x360")
+        popup.resizable(False, False)
+        popup.transient(self.winfo_toplevel())
+        popup.grab_set()
+
+        tarjeta = ctk.CTkFrame(
+            popup, fg_color=estilos.FONDO_PANEL, corner_radius=estilos.RADIO,
+        )
+        tarjeta.pack(fill="both", expand=True, padx=16, pady=16)
+
+        ctk.CTkLabel(
+            tarjeta, text="Recuperar contraseña", font=estilos.F_SUBTITULO,
+            text_color=estilos.TEXTO_CLARO,
+        ).pack(padx=24, pady=(16, 4))
+        ctk.CTkLabel(
+            tarjeta, text=pregunta, font=estilos.F_BOLD,
+            text_color=estilos.TEXTO_CLARO, wraplength=360, justify="center",
+        ).pack(padx=24, pady=(8, 12))
+
+        entradaRespuesta = ctk.CTkEntry(
+            tarjeta, font=estilos.F_NORMAL, height=38,
+            fg_color=estilos.ENTRADA, text_color=estilos.ENTRADA_TEXTO,
+            corner_radius=estilos.RADIO, show="*",
+            placeholder_text="Respuesta de seguridad",
+        )
+        entradaRespuesta.pack(padx=24, pady=(0, 8), fill="x")
+        entradaNueva = ctk.CTkEntry(
+            tarjeta, font=estilos.F_NORMAL, height=38,
+            fg_color=estilos.ENTRADA, text_color=estilos.ENTRADA_TEXTO,
+            corner_radius=estilos.RADIO, show="*",
+            placeholder_text="Nueva contraseña (mín. 4 caracteres)",
+        )
+        entradaNueva.pack(padx=24, pady=(0, 14), fill="x")
+
+        def _confirmar():
+            respuesta = entradaRespuesta.get()
+            nueva = entradaNueva.get()
+            popup.destroy()
+            resultado = self.controlador.recuperarPassword(respuesta, nueva)
+            if resultado["ok"]:
+                self._informar(resultado["mensaje"])
+            else:
+                self._alerta(resultado["mensaje"])
+
+        acciones = ctk.CTkFrame(tarjeta, fg_color="transparent")
+        acciones.pack(fill="x", padx=24, pady=(0, 16))
+        ctk.CTkButton(
+            acciones, text="Cancelar", font=estilos.F_BOLD, height=40,
+            fg_color=estilos.BOTON_BARRA, hover_color=estilos.BOTON_BARRA_HOVER,
+            command=popup.destroy,
+        ).pack(side="left", expand=True, fill="x", padx=(0, 8))
+        ctk.CTkButton(
+            acciones, text="Restablecer", font=estilos.F_BOLD, height=40,
+            fg_color=estilos.BOTON_BARRA_ACTIVO,
+            hover_color=estilos.BOTON_BARRA_HOVER,
+            command=_confirmar,
+        ).pack(side="left", expand=True, fill="x", padx=(8, 0))
+
+        entradaRespuesta.focus_set()
     # ------------------------------------------------------------------
     @staticmethod
     def _parsearMonto(texto):
@@ -292,6 +402,12 @@ class VistaLogin(ctk.CTkFrame):
     # ------------------------------------------------------------------
     # Diálogos
     # ------------------------------------------------------------------
+    @staticmethod
+    @staticmethod
+    def _informar(mensaje):
+        """Muestra un aviso informativo al usuario."""
+        CTkMessagebox(title="Información", message=mensaje, icon="info")
+
     @staticmethod
     def _alerta(mensaje):
         """Muestra un aviso de error al usuario."""

@@ -100,6 +100,7 @@ class Aplicacion(ctk.CTk):
             ("configSesion", "Configuración de\nSesión",
              lambda: self.mostrarConfigSesion()),
             ("historial", "Historial", lambda: self.mostrarHistorial()),
+            ("estadisticas", "Estadísticas", lambda: self.mostrarEstadisticas()),
         ]
         for clave, etiqueta, accion in definiciones:
             boton = ctk.CTkButton(
@@ -211,6 +212,17 @@ class Aplicacion(ctk.CTk):
         self.vistaActual = VistaHistorial(self.contenido, self.controlador)
         self.vistaActual.pack(fill="both", expand=True)
         self._resaltarBoton("historial")
+
+    def mostrarEstadisticas(self):
+        """Muestra la pantalla de Estadísticas (MJ2)."""
+        from .estadisticas import VistaEstadisticas
+
+        self._entrarModoApp()
+        self._limpiarContenido()
+        self.nombreVista = "estadisticas"
+        self.vistaActual = VistaEstadisticas(self.contenido, self.controlador)
+        self.vistaActual.pack(fill="both", expand=True)
+        self._resaltarBoton("estadisticas")
 
     # ------------------------------------------------------------------
     # Home
