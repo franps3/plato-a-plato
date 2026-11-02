@@ -9,9 +9,10 @@
 # Qué arma el build:
 #   * --windowed: sin consola detrás (los errores quedan en plato.log).
 #   * --add-data vistas/recursos: los PNG de íconos de las vistas.
+#   * --add-data logo.png: logo del sistema disponible en runtime.
 #   * --collect-all customtkinter y CTkMessagebox: sus temas y datos internos.
-#   * Ícono del .exe generado al vuelo desde vistas/recursos/casa.png; si la
-#     conversión falla, se compila igual sin ícono (el build no se corta).
+#   * Ícono del .exe generado al vuelo desde logo.png; si la conversión
+#     falla, se compila igual sin ícono (el build no se corta).
 #
 # Portabilidad: al abrir el binario, bd.db / plato.log / bd_respaldo.db se
 # crean en la MISMA carpeta del .exe (ver CARPETA_BASE en acceso/mainDAO.py),
@@ -25,9 +26,10 @@ import subprocess
 import sys
 import tempfile
 
+CARPETA_BASE = os.path.dirname(os.path.abspath(__file__))
 NOMBRE = "PlatoAPlato"                              # nombre del .exe
 PUNTO_ENTRADA = "main.py"                           # script de arranque
-ICONO_FUENTE = os.path.join("vistas", "recursos", "casa.png")
+ICONO_FUENTE = os.path.join(CARPETA_BASE, "vistas", "recursos", "logo.png")  # logo del sistema
 
 
 def _crearIcono(carpetaTemporal):
@@ -63,7 +65,15 @@ def _ordenPyInstaller(icono, unSoloArchivo):
         "--windowed",               # App de escritorio: sin consola.
         "--name", NOMBRE,
         # PNG de íconos de las vistas (se generan en runtime si faltan).
-        "--add-data", "vistas/recursos" + os.pathsep + "vistas/recursos",
+        "--add-data",
+        os.path.join(CARPETA_BASE, "vistas", "recursos")
+        + os.pathsep
+        + os.path.join("vistas", "recursos"),
+        # Logo del sistema (disponible en runtime junto al ejecutable).
+        "--add-data",
+        os.path.join(CARPETA_BASE, "vistas", "recursos", "logo.png")
+        + os.pathsep
+        + os.path.join("vistas", "recursos"),
         # Temas y datos internos de las librerías de UI.
         "--collect-all", "customtkinter",
         "--collect-all", "CTkMessagebox",
@@ -88,7 +98,7 @@ def main():
         orden = _ordenPyInstaller(icono, unSoloArchivo)
         print("Compilando " + NOMBRE + "...")
         print("Orden: " + " ".join(orden))
-        subprocess.run(orden, check=True)
+        subprocess.run(orden, check=True, cwd=CARPETA_BASE)
     except subprocess.CalledProcessError as err:
         print("Error de PyInstaller (código %s)." % err.returncode)
         print("Revisá que PyInstaller esté instalado: pip install pyinstaller")
