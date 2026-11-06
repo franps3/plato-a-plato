@@ -74,6 +74,9 @@ class Aplicacion(ctk.CTk):
         self.iconoHome = ctk.CTkImage(
             light_image=Image.open(rutas["casa"]), size=(26, 26)
         )
+        self.iconoMonitor = ctk.CTkImage(
+            light_image=Image.open(rutas["configuracion"]), size=(26, 26)
+        )
 
     # ------------------------------------------------------------------
     # Construcción de la interfaz
@@ -101,6 +104,7 @@ class Aplicacion(ctk.CTk):
              lambda: self.mostrarConfigSesion()),
             ("historial", "Historial", lambda: self.mostrarHistorial()),
             ("estadisticas", "Estadísticas", lambda: self.mostrarEstadisticas()),
+            ("monitor", "Monitor de\nCocina", self.mostrarMonitorCocina),
         ]
         for clave, etiqueta, accion in definiciones:
             boton = ctk.CTkButton(
@@ -112,6 +116,20 @@ class Aplicacion(ctk.CTk):
             )
             boton.pack(side="left", padx=6, pady=10)
             self.botonesNav[clave] = boton
+
+    # ------------------------------------------------------------------
+    # Método para mostrar el Monitor de Cocina.
+    # ------------------------------------------------------------------
+    def mostrarMonitorCocina(self):
+        """Muestra la vista del Monitor de Cocina."""
+        from .monitorCocina import VistaMonitorCocina
+
+        self._entrarModoApp()
+        self._limpiarContenido()
+        self.nombreVista = "monitorCocina"
+        self.vistaActual = VistaMonitorCocina(self.contenido, self.controlador)
+        self.vistaActual.pack(fill="both", expand=True)
+        self._resaltarBoton("monitor")
 
     def _construirContenido(self):
         """Crea el contenedor donde se intercambian las vistas."""

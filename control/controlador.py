@@ -34,6 +34,10 @@ from .modelos import Caja, DetalleVenta, Sesion
 from .servProd import ServProd
 from .servStock import ServStock
 from .servVenta import ServVenta
+try:
+    from red.socketServerManager import SocketServerManager
+except ImportError:
+    SocketServerManager = None
 
 # Configuración de logging central de la aplicación.
 # Se usa un FileHandler explícito para que plato.log se cree bajo cualquier
@@ -90,6 +94,12 @@ class Controlador:
         self.servProd = ServProd(prodDAO)
         self.servStock = ServStock(stockDAO)
         self.servVenta = ServVenta(ventaDAO, stockDAO, prodDAO)
+
+        # Servidor opcional para el Monitor de Cocina (specTP.md).
+        if SocketServerManager is not None:
+            self.socketServerManager = SocketServerManager()
+        else:
+            self.socketServerManager = None
 
         # Estado en memoria del controlador.
         self.sesionActiva: Optional[Sesion] = None
@@ -1162,4 +1172,57 @@ class Controlador:
         except AppError as err:
             log.error("%s: %s", type(err).__name__, err, exc_info=True)
             return {"ok": False, "mensaje": str(err), "datos": None}
+
+    # ------------------------------------------------------------------
+    # Monitor de Cocina (specTP.md)
+    # ------------------------------------------------------------------
+
+    def iniciarServidorCocina(self) -> dict:
+        """Inicia el servidor FastAPI/Uvicorn para el Monitor de Cocina.
+
+        Returns:
+            dict: {"ok": bool, "mensaje": str}
+        """
+        if self.socketServerManager is None:
+            return {"ok": False, "mensaje": "Módulo de monitor no disponible."}
+        if self.socketServerManager.running:
+            return {"ok": True, "mensaje": "Servidor ya iniciado."}
+        return self.socketServerManager.iniciar()
+
+    def detenerServidorCocina(self) -> dict:
+        """Detiene el servidor del Monitor de Cocina.
+
+        Returns:
+            dict: {"ok": bool, "mensaje": str}
+        """
+        if self.socketServerManager is None:
+            return {"ok": False, "mensaje": "Módulo de monitor no disponible."}
+        return self.socketServerManager.detener()
+
+    def broadcastVenta(self, datos: dict) -> dict:
+        """Emite un evento NUEVA_ORDEN a todos los monitores conectados.
+
+        Se llama tras confirmar una venta exitosa.
+        Los datos deben contener: id_venta, caja, total_items, items.
+
+        Returns:
+            dict: {"ok": bool, "mensaje": str, "enviados": int}
+        """
+        if self.socketServerManager is None:
+            return {"ok": True, "mensaje": "Sin módulo de monitor", "enviados": 0}
+        if not self.socketServerManager.running:
+            return {"ok": True, "mensaje": "Servidor no iniciado", "enviados": 0}
+        return self.socketServerManager.broadcast(self.socketServerManager.NUEVA_ORDEN, datos)
+
+    def _copiarAlPortapapeles(self, texto: str) -> None:
+        """Copia un texto al portapapeles del sistema.
+
+        Se utiliza para copiar la URL de conexión del monitor.
+        """
+        try:
+            import pyperclip
+            pyperclip.copy(texto)
+        except ImportError:
+            # Si no hay pyperclip, mostramos un aviso y no fallamos.
+            pass
 
