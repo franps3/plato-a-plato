@@ -12,6 +12,7 @@
 
 import hashlib
 import logging
+import sys
 from datetime import datetime
 from typing import Optional
 
@@ -777,6 +778,35 @@ class Controlador:
             # Actualiza el estado en memoria y vacía el carrito.
             self.sesionActiva.caja = cajaNueva
             self.carrito = {}
+
+            # Monitor de Cocina (specTP.md): tras el COMMIT exitoso, emite la
+            # venta a los monitores conectados. No debe interrumpir el cobro
+            # si la red o los monitores no están disponibles.
+            try:
+                if idCaja is not None:
+                    cajaInfo = self.dao.obtenerCaja(idCaja)
+                    nombreCaja = cajaInfo[2] if cajaInfo else "Caja"
+                else:
+                    nombreCaja = "Caja principal"
+                items = []
+                for detalle in detalles:
+                    producto = productos.get(detalle.idProducto)
+                    items.append({
+                        "nombre": (producto.nombre if producto is not None
+                                   else f"Producto {detalle.idProducto}"),
+                        "cantidad": detalle.cantidad,
+                        "observacion": "",
+                    })
+                datosMonitor = {
+                    "id_venta": venta.idVenta,
+                    "caja": nombreCaja,
+                    "total_items": sum(d.cantidad for d in detalles),
+                    "items": items,
+                }
+                self.broadcastVenta(datosMonitor)
+            except Exception:
+                pass
+
             return {
                 "ok": True,
                 "mensaje": "Venta registrada correctamente.",
@@ -1177,6 +1207,21 @@ class Controlador:
     # Monitor de Cocina (specTP.md)
     # ------------------------------------------------------------------
 
+    def obtenerIPCocina(self) -> str:
+        """Devuelve la IP local para el Monitor de Cocina (specTP.md)."""
+        try:
+            if self.socketServerManager is not None:
+                return self.socketServerManager.obtenerIP()
+        except Exception:
+            pass
+        try:
+            from red.socketServerManager import SocketServerManager
+
+            return SocketServerManager.obtenerIP()
+        except Exception:
+            return "127.0.0.1"
+
+
     def iniciarServidorCocina(self) -> dict:
         """Inicia el servidor FastAPI/Uvicorn para el Monitor de Cocina.
 
@@ -1222,7 +1267,30 @@ class Controlador:
         try:
             import pyperclip
             pyperclip.copy(texto)
+            return
         except ImportError:
-            # Si no hay pyperclip, mostramos un aviso y no fallamos.
+            pass
+
+        try:
+            import tkinter as tk
+            root = tk.Tk()
+            root.withdraw()
+            root.clipboard_clear()
+            root.clipboard_append(texto)
+            root.update()
+            root.destroy()
+            return
+        except Exception:
+            pass
+
+        try:
+            import subprocess
+            if sys.platform.startswith("win"):
+                subprocess.run("clip", input=texto, text=True, check=False, shell=True)
+            elif sys.platform.startswith("darwin"):
+                subprocess.run("pbcopy", input=texto, text=True, check=False, shell=True)
+            else:
+                subprocess.run("xclip -selection clipboard", input=texto, text=True, check=False, shell=True)
+        except Exception:
             pass
 

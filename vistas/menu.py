@@ -104,7 +104,7 @@ class Aplicacion(ctk.CTk):
              lambda: self.mostrarConfigSesion()),
             ("historial", "Historial", lambda: self.mostrarHistorial()),
             ("estadisticas", "Estadísticas", lambda: self.mostrarEstadisticas()),
-            ("monitor", "Monitor de\nCocina", self.mostrarMonitorCocina),
+            ("monitor", "Monitor de\nCocina", lambda: self.mostrarMonitorCocina()),
         ]
         for clave, etiqueta, accion in definiciones:
             boton = ctk.CTkButton(

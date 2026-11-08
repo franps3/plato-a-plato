@@ -17,10 +17,11 @@ import threading
 from datetime import datetime, timezone
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi.responses import HTMLResponse
 from qrcode import make as qrcode_make
 from PIL import Image
 
-from red.static.cocina_html import COOKA_HTML
+from red.static.cocina_html import COCINA_HTML
 
 app = FastAPI(title="Plato a Plato - Monitor de Cocina")
 
@@ -32,6 +33,7 @@ class SocketServerManager:
         self.host = host
         self.port = port
         self._app = FastAPI()
+        self._server = None
         self._server_thread = None
         self._loop = None
         self._running = False
@@ -39,6 +41,7 @@ class SocketServerManager:
         self._sockets = set()
         self._sockets_lock = threading.Lock()
         self._clientes_activos = 0
+        self._on_status_change = None
 
         self.NUEVA_ORDEN = "NUEVA_ORDEN"
         self.ESTADO_CONEXION = "ESTADO_CONEXION"
@@ -58,13 +61,22 @@ class SocketServerManager:
                 host=self.host,
                 port=self.port,
                 loop="asyncio",
+                lifespan="off",
                 log_level="warning",
             )
-            server = Server(config)
+            self._server = Server(config)
 
             def _ejecutar():
                 asyncio.set_event_loop(self._loop)
-                self._loop.run_until_complete(server.serve())
+                try:
+                    self._loop.run_until_complete(self._server.serve())
+                except RuntimeError as exc:
+                    if "Event loop stopped before Future completed" not in str(exc):
+                        raise
+                finally:
+                    self._server = None
+                    self._running = False
+                    self._server_thread = None
 
             self._server_thread = threading.Thread(
                 target=_ejecutar, daemon=True, name="MonitorCocinaServer"
@@ -74,18 +86,27 @@ class SocketServerManager:
             return {"ok": True, "mensaje": f"Servidor iniciado en {self.host}:{self.port}."}
         except Exception as err:
             self._running = False
+            self._server = None
             return {"ok": False, "mensaje": f"No se pudo iniciar el servidor: {err}"}
 
     def detener(self) -> dict:
-        if not self._running:
+        if not self._running and self._server is None:
             return {"ok": True, "mensaje": "Servidor no estaba iniciado."}
 
         try:
             self._running = False
-            if self._loop is not None and self._loop.is_running():
-                self._loop.call_soon_threadsafe(self._loop.stop)
+            if self._server is not None and self._loop is not None:
+                try:
+                    self._server.should_exit = True
+                    self._server.force_exit = True
+                except Exception:
+                    pass
+                if self._loop.is_running():
+                    self._loop.call_soon_threadsafe(setattr, self._server, "should_exit", True)
             if self._server_thread is not None:
-                self._server_thread.join(timeout=5)
+                self._server_thread.join(timeout=20)
+            self._server = None
+            self._server_thread = None
             self._sockets.clear()
             self._clientes_activos = 0
             return {"ok": True, "mensaje": "Servidor detenido."}
@@ -108,11 +129,21 @@ class SocketServerManager:
         self._sockets.add(websocket)
         with self._sockets_lock:
             self._clientes_activos = len(self._sockets)
+        self._notificarEstado()
 
     def desconectar(self, websocket: WebSocket):
         with self._sockets_lock:
             self._sockets.discard(websocket)
             self._clientes_activos = max(0, len(self._sockets))
+        self._notificarEstado()
+
+    def _notificarEstado(self):
+        cb = self._on_status_change
+        if callable(cb):
+            try:
+                cb()
+            except Exception:
+                pass
 
     def broadcast(self, evento: str, datos: dict) -> dict:
         if not self._running or not self._sockets:
@@ -141,7 +172,6 @@ class SocketServerManager:
                     fut.result(timeout=1)
                     resultado["enviados"] += 1
                 except Exception as err:
-                    resultado["enviados"] += 1
                     resultado["error"] = err
 
             return resultado
@@ -162,7 +192,7 @@ class SocketServerManager:
     # ------------------------------------------------------------------
 
     def _configurarRutas(self):
-        @self._app.get("/ws/cocina")
+        @self._app.websocket("/ws/cocina")
         async def websocket_cocina(websocket: WebSocket):
             await websocket.accept()
             self.conectar(websocket)
@@ -192,11 +222,17 @@ class SocketServerManager:
         @self._app.get("/cocina", response_class=HTMLResponse)
         async def pagina_cocina():
             """Entrega la Web App de cocina (cliente monitor)."""
-            return COOKA_HTML
+            return COCINA_HTML
 
     # ------------------------------------------------------------------
     # Métodos auxiliares / compatibilidad con el spec
     # ------------------------------------------------------------------
+
+    @staticmethod
+    def obtenerURLAcceso(ip: str | None = None, port: int = 8000) -> str:
+        """Devuelve la URL web accesible desde la LAN para abrir el monitor."""
+        host = (ip or SocketServerManager.obtenerIP() or "127.0.0.1").strip()
+        return f"http://{host}:{port}/cocina"
 
     @staticmethod
     def obtenerIP() -> str:
@@ -213,5 +249,16 @@ class SocketServerManager:
 
     @staticmethod
     def generarQR(url: str) -> Image.Image:
-        return qrcode_make(url)
+        qr = qrcode_make(url)
+        imagen = getattr(qr, "get_image", None)
+        if callable(imagen):
+            qr = imagen()
+        if isinstance(qr, Image.Image):
+            return qr
+        if hasattr(qr, "convert"):
+            try:
+                return qr.convert("RGB")
+            except Exception:
+                pass
+        return Image.new("RGB", (240, 240), color="white")
 
