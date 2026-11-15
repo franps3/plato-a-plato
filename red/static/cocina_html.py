@@ -65,6 +65,10 @@ COCINA_HTML = r"""<!DOCTYPE html>
 
   <script>
     (function () {
+      // El navegador se conecta al WebSocket del servidor para recibir eventos de
+      // estado y la llegada de nuevas órdenes. La pantalla de cocina es un cliente
+      // ligero que no persiste información propia: todo se re-renderiza desde los
+      // mensajes emitidos por el backend.
       const host = location.hostname || "127.0.0.1";
       const protocol = location.protocol === "https:" ? "wss://" : "ws://";
       const wsUrl = protocol + host + ":8000/ws/cocina";
@@ -75,6 +79,8 @@ COCINA_HTML = r"""<!DOCTYPE html>
       const beep = document.getElementById("beep");
       let socket = null;
 
+      // El sonido ayuda a avisar al personal cuando llega una nueva orden sin
+      // fijarse en la pestaña del monitor.
       function playBeep() {
         const ctx = new (window.AudioContext || window.webkitAudioContext)();
         const osc = ctx.createOscillator();
@@ -87,6 +93,10 @@ COCINA_HTML = r"""<!DOCTYPE html>
         osc.stop(ctx.currentTime + 0.15);
       }
 
+      // Se encarga de abrir la conexión WebSocket y reintentar si el servidor está
+      // aún arrancando o se cae inesperadamente. La lógica es sencilla: si llega un
+      // mensaje de estado cambia el contador; si llega una nueva orden, se renderiza
+      // la tarjeta correspondiente.
       function connect(retryCount) {
         retryCount = retryCount || 0;
         hostLabel.textContent = host;
@@ -119,6 +129,9 @@ COCINA_HTML = r"""<!DOCTYPE html>
         socket.onerror = () => socket.close();
       }
 
+      // Genera la tarjeta visual para una orden nueva o reemplaza una existente con
+      // el mismo id. Esto evita duplicados si el mismo pedido llega dos veces por
+      // reintentos o recargas del cliente.
       function renderOrder(datos) {
         const { id_venta, caja, total_items, items } = datos;
         const existing = document.getElementById(`orden-${id_venta}`);
@@ -159,6 +172,9 @@ COCINA_HTML = r"""<!DOCTYPE html>
         if (placeholder) placeholder.remove();
       }
 
+      // Cuando el cocinero confirma un pedido, la tarjeta cambia su estilo al estado
+      // "listo" y luego se elimina del DOM con una pequeña demora para dar feedback
+      // visual. Si ya no queda ninguna orden, se vuelve a mostrar el placeholder.
       function marcarListo(idVenta) {
         const tarjeta = document.getElementById(`orden-${idVenta}`);
         if (!tarjeta) return;

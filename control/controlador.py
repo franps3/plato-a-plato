@@ -1208,7 +1208,12 @@ class Controlador:
     # ------------------------------------------------------------------
 
     def obtenerIPCocina(self) -> str:
-        """Devuelve la IP local para el Monitor de Cocina (specTP.md)."""
+        """Devuelve la IP local del host para acceder al Monitor de Cocina.
+
+        La vista del monitor usa este valor para armar la URL que el operador
+        comparte con el cliente web. Si no existe un servidor activo, se intenta
+        devolver una IP local razonable por defecto.
+        """
         try:
             if self.socketServerManager is not None:
                 return self.socketServerManager.obtenerIP()
@@ -1221,9 +1226,12 @@ class Controlador:
         except Exception:
             return "127.0.0.1"
 
-
     def iniciarServidorCocina(self) -> dict:
-        """Inicia el servidor FastAPI/Uvicorn para el Monitor de Cocina.
+        """Arranca el servidor FastAPI/Uvicorn del monitor de cocina.
+
+        La vista llama a este método cuando el usuario presiona "Iniciar
+        Servidor". La operación se delega al SocketServerManager para que todo
+        el ciclo de vida del proceso quede encapsulado en la capa de red.
 
         Returns:
             dict: {"ok": bool, "mensaje": str}
@@ -1235,7 +1243,11 @@ class Controlador:
         return self.socketServerManager.iniciar()
 
     def detenerServidorCocina(self) -> dict:
-        """Detiene el servidor del Monitor de Cocina.
+        """Detiene el servidor FastAPI/Uvicorn del monitor de cocina.
+
+        Se usa cuando el operador cierra el servicio desde la UI. La operación
+        debe ser idempotente: si el servidor ya está detenido, la respuesta debe
+        indicar que no hubo trabajo adicional.
 
         Returns:
             dict: {"ok": bool, "mensaje": str}
@@ -1245,10 +1257,11 @@ class Controlador:
         return self.socketServerManager.detener()
 
     def broadcastVenta(self, datos: dict) -> dict:
-        """Emite un evento NUEVA_ORDEN a todos los monitores conectados.
+        """Emite un evento NUEVA_ORDEN a todos los clientes conectados.
 
-        Se llama tras confirmar una venta exitosa.
-        Los datos deben contener: id_venta, caja, total_items, items.
+        Esta función se invoca después de confirmar una venta exitosa. El payload
+        debe incluir la identificación de la venta, la caja asociada, la suma de
+        artículos y la lista detallada de productos.
 
         Returns:
             dict: {"ok": bool, "mensaje": str, "enviados": int}
@@ -1257,12 +1270,18 @@ class Controlador:
             return {"ok": True, "mensaje": "Sin módulo de monitor", "enviados": 0}
         if not self.socketServerManager.running:
             return {"ok": True, "mensaje": "Servidor no iniciado", "enviados": 0}
-        return self.socketServerManager.broadcast(self.socketServerManager.NUEVA_ORDEN, datos)
+        return self.socketServerManager.broadcast(
+            self.socketServerManager.NUEVA_ORDEN,
+            datos,
+        )
 
     def _copiarAlPortapapeles(self, texto: str) -> None:
         """Copia un texto al portapapeles del sistema.
 
-        Se utiliza para copiar la URL de conexión del monitor.
+        Se usa para enviar la URL de acceso del monitor a la clipboard del
+        usuario. El método intenta varios mecanismos según el sistema operativo
+        y la librería disponible, para que funcione tanto en Windows como en
+        entornos Unix/macOS.
         """
         try:
             import pyperclip
@@ -1286,11 +1305,29 @@ class Controlador:
         try:
             import subprocess
             if sys.platform.startswith("win"):
-                subprocess.run("clip", input=texto, text=True, check=False, shell=True)
+                subprocess.run(
+                    "clip",
+                    input=texto,
+                    text=True,
+                    check=False,
+                    shell=True,
+                )
             elif sys.platform.startswith("darwin"):
-                subprocess.run("pbcopy", input=texto, text=True, check=False, shell=True)
+                subprocess.run(
+                    "pbcopy",
+                    input=texto,
+                    text=True,
+                    check=False,
+                    shell=True,
+                )
             else:
-                subprocess.run("xclip -selection clipboard", input=texto, text=True, check=False, shell=True)
+                subprocess.run(
+                    "xclip -selection clipboard",
+                    input=texto,
+                    text=True,
+                    check=False,
+                    shell=True,
+                )
         except Exception:
             pass
 
