@@ -52,12 +52,12 @@ class VistaConfigSesion(ctk.CTkFrame):
             self, text="Configuración de Sesión", font=estilos.F_TITULO,
             text_color=estilos.TEXTO_CLARO,
         )
-        titulo.pack(padx=24, pady=(28, 10))
+        titulo.pack(padx=24, pady=(92, 10))
 
         tarjeta = ctk.CTkFrame(
             self, fg_color=estilos.FONDO_PANEL, corner_radius=estilos.RADIO,
         )
-        tarjeta.pack(fill="both", expand=True, padx=48, pady=(6, 24))
+        tarjeta.pack(fill="both", expand=True, padx=48, pady=(36, 24))
 
         # Valor actual de cada caja (MJ7): se muestra arriba de las acciones.
         marcoCajas = ctk.CTkFrame(

@@ -40,10 +40,18 @@ def _formatoMonto(valor):
 class VistaVenta(ctk.CTkFrame):
     """Pantalla de venta: catálogo, búsqueda, carrito y gastos (CU5, CU9, CU10 y CU11)."""
 
+    @staticmethod
+    def _textoStock(producto, idsCombos):
+        """Devuelve el texto del stock a mostrar para cada ítem de venta."""
+        if getattr(producto, "idProducto", None) in idsCombos:
+            return ""
+        return str(getattr(producto, "stock", 0))
+
     def __init__(self, master, controlador):
         super().__init__(master, fg_color=estilos.FONDO)
         self.controlador = controlador
         self.productos = []          # lista de Producto vigente
+        self.idsCombos = set()       # ids de combos para ocultar stock derivado
         self.filtro = ""             # texto de búsqueda actual
         self.popupCarrito = None     # CTkToplevel del carrito (si está abierto)
         self.popupGasto = None       # CTkToplevel "Registrar Gasto" (CU11)
@@ -149,6 +157,13 @@ class VistaVenta(ctk.CTkFrame):
         else:
             self.productos = []
             self._alerta(resultado["mensaje"])
+
+        idsCombosResultado = self.controlador.verCombos()
+        self.idsCombos = (
+            {idCombo for idCombo, *_ in (idsCombosResultado["datos"] or [])}
+            if idsCombosResultado["ok"]
+            else set()
+        )
         self._renderProductos()
         # MJ7: mantiene el total de caja al día (ventas y gastos lo modifican).
         self._refrescarCaja()
@@ -191,12 +206,14 @@ class VistaVenta(ctk.CTkFrame):
             text_color=estilos.TEXTO_CLARO, anchor="w",
         ).pack(side="left", fill="x", expand=True, padx=(14, 8))
 
-        # Recuadro con el stock disponible.
-        ctk.CTkLabel(
-            fila, text=str(producto.stock), font=estilos.F_BOLD,
-            fg_color=estilos.BADGE_STOCK, text_color=estilos.TEXTO_CLARO,
-            corner_radius=8, width=42,
-        ).pack(side="left", padx=6)
+        # Recuadro con el stock disponible; los combos no tienen stock propio.
+        textoStock = self._textoStock(producto, self.idsCombos)
+        if textoStock:
+            ctk.CTkLabel(
+                fila, text=textoStock, font=estilos.F_BOLD,
+                fg_color=estilos.BADGE_STOCK, text_color=estilos.TEXTO_CLARO,
+                corner_radius=8, width=42,
+            ).pack(side="left", padx=6)
 
         # Cantidad y subtotal en el carrito (MJ8).
         cantidadCarrito = self.controlador.carrito.get(producto.idProducto, 0)

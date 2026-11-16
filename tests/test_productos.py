@@ -9,6 +9,7 @@
 
 import sys
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -19,6 +20,8 @@ if str(RAIZ) not in sys.path:
 
 from control.controlador import Controlador
 from tests.fakeMainDAO import FakeBD, FakeMainDAO, FakeProdDAO, FakeStockDAO
+from vistas.config import VistaConfigProductos
+from vistas.venta import VistaVenta
 
 
 @pytest.fixture
@@ -202,3 +205,22 @@ def test_cu8_prohibidoEliminarEnCarrito(controlador):
     assert "carrito" in resultado["mensaje"].lower()
     # El producto sigue en el catálogo.
     assert len(controlador.verProductos()["datos"]) == 1
+
+
+def test_combo_no_muestra_stock_en_venta():
+    """Los combos no deben renderizar un valor de stock en la lista de venta."""
+    productoCombo = SimpleNamespace(idProducto=7, nombre="Combo", stock=99)
+    productoNormal = SimpleNamespace(idProducto=3, nombre="Hamburguesa", stock=5)
+
+    assert VistaVenta._textoStock(productoCombo, {7}) == ""
+    assert VistaVenta._textoStock(productoNormal, {7}) == "5"
+
+
+def test_config_separa_productos_y_combos():
+    """La configuración debe listar productos comunes y combos por separado."""
+    producto = SimpleNamespace(idProducto=1, nombre="Hamburguesa", stock=3)
+    combo = SimpleNamespace(idProducto=7, nombre="Combo", stock=0)
+    items = [producto, combo]
+
+    assert VistaConfigProductos._filtrarProductos(items, {7}) == [producto]
+    assert VistaConfigProductos._filtrarCombos(items, {7}) == [combo]

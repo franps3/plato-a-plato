@@ -45,6 +45,22 @@ def _formatoMonto(valor):
 class VistaConfigProductos(ctk.CTkFrame):
     """Pantalla de configuración del catálogo (CU4-CU8)."""
 
+    @staticmethod
+    def _filtrarProductos(items, idsCombos):
+        """Devuelve solo los productos que no son combos."""
+        return [
+            item for item in items
+            if getattr(item, "idProducto", None) not in idsCombos
+        ]
+
+    @staticmethod
+    def _filtrarCombos(items, idsCombos):
+        """Devuelve solo los ítems que son combos."""
+        return [
+            item for item in items
+            if getattr(item, "idProducto", None) in idsCombos
+        ]
+
     def __init__(self, master, controlador):
         super().__init__(master, fg_color=estilos.FONDO)
         self.controlador = controlador
@@ -146,8 +162,12 @@ class VistaConfigProductos(ctk.CTkFrame):
     def refrescarProductos(self):
         """Consulta el catálogo al controlador y vuelve a renderizar la lista."""
         resultado = self.controlador.verProductos()
+        idsCombosResultado = self.controlador.verCombos()
+        idsCombos = {
+            idCombo for idCombo, *_ in (idsCombosResultado["datos"] or [])
+        } if idsCombosResultado["ok"] else set()
         if resultado["ok"]:
-            self.productos = resultado["datos"] or []
+            self.productos = self._filtrarProductos(resultado["datos"] or [], idsCombos)
         else:
             self.productos = []
             self._alerta(resultado["mensaje"])
@@ -294,12 +314,14 @@ class VistaConfigProductos(ctk.CTkFrame):
             text_color=estilos.TEXTO_TENUE, anchor="w",
         ).pack(side="left", fill="x", expand=True, padx=4)
 
-        # Recuadro con el stock del combo.
-        ctk.CTkLabel(
-            fila, text=str(stock), font=estilos.F_BOLD,
-            fg_color=estilos.BADGE_STOCK, text_color=estilos.TEXTO_CLARO,
-            corner_radius=8, width=42,
-        ).pack(side="left", padx=6)
+        # Los combos no tienen stock propio; se muestra solo el valor derivado
+        # si la vista se reutiliza con un dato de producto común.
+        if idCombo not in {c[0] for c in self.combos}:
+            ctk.CTkLabel(
+                fila, text=str(stock), font=estilos.F_BOLD,
+                fg_color=estilos.BADGE_STOCK, text_color=estilos.TEXTO_CLARO,
+                corner_radius=8, width=42,
+            ).pack(side="left", padx=6)
 
         ctk.CTkLabel(
             fila, text=_formatoMonto(precio), font=estilos.F_PRECIO,

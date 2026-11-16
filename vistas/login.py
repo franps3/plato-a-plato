@@ -33,6 +33,13 @@ def _formatoMonto(valor):
 class VistaLogin(ctk.CTkFrame):
     """Gestor de sesión: crea o inicia la sesión única del sistema."""
 
+    @staticmethod
+    def _calcularAnchoTarjeta(anchoVentana):
+        """Devuelve un ancho de tarjeta adaptable a la resolución actual."""
+        if anchoVentana <= 0:
+            return 580
+        return max(520, min(680, int(anchoVentana * 0.84)))
+
     def __init__(self, master, controlador, alAutenticar=None):
         super().__init__(master, fg_color=estilos.FONDO)
         self.controlador = controlador
@@ -48,6 +55,7 @@ class VistaLogin(ctk.CTkFrame):
         # MJ1: cajas (medios de pago) definidas al crear la sesión.
         self.cajas = []          # list[(nombre, monto)]
         self.popupCaja = None    # CTkToplevel "Nueva caja"
+        self.tarjetaLogin = None
         self._construir()
 
     # ------------------------------------------------------------------
@@ -55,13 +63,33 @@ class VistaLogin(ctk.CTkFrame):
     # ------------------------------------------------------------------
     def _construir(self):
         """Arma la tarjeta central con el formulario de sesión."""
-        # COR6: tarjeta un poco más ancha para mejorar legibilidad y que el
-        # formulario completo se vea bien centrado a cualquier resolución.
+        self.pack(fill="both", expand=True)
+
+        if self.modo == "crear":
+            contenedorScroll = ctk.CTkScrollableFrame(
+                self, fg_color=estilos.FONDO,
+                scrollbar_button_color=estilos.SCROLL,
+                scrollbar_button_hover_color=estilos.SCROLL_HOVER,
+            )
+        else:
+            contenedorScroll = ctk.CTkFrame(
+                self, fg_color=estilos.FONDO,
+            )
+        contenedorScroll.pack(fill="both", expand=True, padx=12, pady=12)
+        contenedorScroll.grid_columnconfigure(0, weight=1)
+
+        ancho = self._calcularAnchoTarjeta(self.winfo_width() or 1200)
         tarjeta = ctk.CTkFrame(
-            self, fg_color=estilos.FONDO_PANEL,
-            corner_radius=estilos.RADIO, width=460,
+            contenedorScroll, fg_color=estilos.FONDO_PANEL,
+            corner_radius=estilos.RADIO, width=ancho,
         )
-        tarjeta.place(relx=0.5, rely=0.5, anchor="center")
+        self.tarjetaLogin = tarjeta
+        padding_top = 90 if self.modo == "crear" else 200
+        tarjeta.grid(
+            row=0, column=0, padx=12, pady=(padding_top, 12), sticky="n"
+        )
+        tarjeta.grid_columnconfigure(0, weight=1)
+        self.bind("<Configure>", self._ajustarAnchoTarjeta)
 
         ctk.CTkLabel(
             tarjeta, text="Plato a Plato", font=estilos.F_TITULO,
@@ -168,6 +196,13 @@ class VistaLogin(ctk.CTkFrame):
             self.marcoCajas.pack(
                 padx=40, pady=(0, 10), fill="x", before=self.botonAccion
             )
+
+    def _ajustarAnchoTarjeta(self, _evento=None):
+        """Mantiene la tarjeta del login dentro del ancho disponible."""
+        if self.tarjetaLogin is None:
+            return
+        ancho = self._calcularAnchoTarjeta(self.winfo_width() or 1200)
+        self.tarjetaLogin.configure(width=ancho)
 
     # ------------------------------------------------------------------
     # Acción principal (CU1 / CU2)
