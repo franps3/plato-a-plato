@@ -8,11 +8,9 @@
 #
 # Qué arma el build:
 #   * --windowed: sin consola detrás (los errores quedan en plato.log).
-#   * --add-data vistas/recursos: los PNG de íconos de las vistas.
-#   * --add-data logo.png: logo del sistema disponible en runtime.
+#   * --add-data vistas/recursos: los recursos gráficos de la app.
 #   * --collect-all customtkinter y CTkMessagebox: sus temas y datos internos.
-#   * Ícono del .exe generado al vuelo desde logo.png; si la conversión
-#     falla, se compila igual sin ícono (el build no se corta).
+#   * El .exe usa el icono real del proyecto: vistas/recursos/logo.ico.
 #
 # Portabilidad: al abrir el binario, bd.db / plato.log / bd_respaldo.db se
 # crean en la MISMA carpeta del .exe (ver CARPETA_BASE en acceso/mainDAO.py),
@@ -29,29 +27,20 @@ import tempfile
 CARPETA_BASE = os.path.dirname(os.path.abspath(__file__))
 NOMBRE = "PlatoAPlato"                              # nombre del .exe
 PUNTO_ENTRADA = "main.py"                           # script de arranque
-ICONO_FUENTE = os.path.join(CARPETA_BASE, "vistas", "recursos", "logo.png")  # logo del sistema
+ICONO_FUENTE = os.path.join(CARPETA_BASE, "vistas", "recursos", "logo.ico")  # icono real del sistema
 
 
 def _crearIcono(carpetaTemporal):
-    """Genera el .ico del ejecutable desde el PNG de la casa.
+    """Usa el .ico real del proyecto para el ejecutable.
 
-    Retorna la ruta del .ico o None si no se pudo generar (el build sigue).
+    Si el icono no existe, el build sigue igual sin icono personalizado.
     """
     try:
-        from PIL import Image
-
         if not os.path.exists(ICONO_FUENTE):
             return None
-        rutaIco = os.path.join(carpetaTemporal, NOMBRE + ".ico")
-        imagen = Image.open(ICONO_FUENTE).convert("RGBA")
-        imagen.save(
-            rutaIco, "ICO",
-            sizes=[(16, 16), (32, 32), (48, 48), (64, 64),
-                   (128, 128), (256, 256)],
-        )
-        return rutaIco
+        return ICONO_FUENTE
     except Exception as err:   # Build "best effort": nunca corta el empaquetado.
-        print("Aviso: no se pudo generar el icono (%s)." % err)
+        print("Aviso: no se pudo usar el icono (%s)." % err)
         print("Se compila sin icono personalizado.")
         return None
 
@@ -64,14 +53,9 @@ def _ordenPyInstaller(icono, unSoloArchivo):
         "--clean",                  # Descarta cachés previos.
         "--windowed",               # App de escritorio: sin consola.
         "--name", NOMBRE,
-        # PNG de íconos de las vistas (se generan en runtime si faltan).
+        # Recursos gráficos de la app (incluye logo.ico y los íconos de UI).
         "--add-data",
         os.path.join(CARPETA_BASE, "vistas", "recursos")
-        + os.pathsep
-        + os.path.join("vistas", "recursos"),
-        # Logo del sistema (disponible en runtime junto al ejecutable).
-        "--add-data",
-        os.path.join(CARPETA_BASE, "vistas", "recursos", "logo.png")
         + os.pathsep
         + os.path.join("vistas", "recursos"),
         # Temas y datos internos de las librerías de UI.
