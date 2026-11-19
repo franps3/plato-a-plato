@@ -31,6 +31,7 @@ from CTkMessagebox import CTkMessagebox
 from PIL import Image
 
 from . import estilos
+from .dialogos import aplicarIconoVentana
 from .iconos import obtenerIconos
 
 
@@ -371,6 +372,7 @@ class VistaConfigProductos(ctk.CTkFrame):
         self._cerrarPopups()
         self.popupAlta = ctk.CTkToplevel(self)
         self.popupAlta.title("Añadir Producto")
+        aplicarIconoVentana(self.popupAlta)
         self.popupAlta.configure(fg_color=estilos.FONDO)
         self.popupAlta.geometry("460x560")
         self.popupAlta.resizable(False, False)
@@ -484,6 +486,7 @@ class VistaConfigProductos(ctk.CTkFrame):
         self.productoSeleccionado = producto
         self.popupModificar = ctk.CTkToplevel(self)
         self.popupModificar.title("Modificar Producto")
+        aplicarIconoVentana(self.popupModificar)
         self.popupModificar.configure(fg_color=estilos.FONDO)
         self.popupModificar.geometry("460x560")
         self.popupModificar.resizable(False, False)
@@ -617,6 +620,7 @@ class VistaConfigProductos(ctk.CTkFrame):
         self.productoSeleccionado = producto
         self.popupEliminar = ctk.CTkToplevel(self)
         self.popupEliminar.title("Eliminar Producto")
+        aplicarIconoVentana(self.popupEliminar)
         self.popupEliminar.configure(fg_color=estilos.FONDO)
         self.popupEliminar.geometry("440x270")
         self.popupEliminar.resizable(False, False)
@@ -700,6 +704,7 @@ class VistaConfigProductos(ctk.CTkFrame):
         editando = combo is not None
         self.popupCombo = ctk.CTkToplevel(self)
         self.popupCombo.title("Modificar Combo" if editando else "Añadir Combo")
+        aplicarIconoVentana(self.popupCombo)
         self.popupCombo.configure(fg_color=estilos.FONDO)
         self.popupCombo.geometry("560x600")
         self.popupCombo.resizable(False, False)

@@ -20,6 +20,7 @@ import customtkinter as ctk
 from CTkMessagebox import CTkMessagebox
 
 from . import estilos
+from .dialogos import aplicarIconoVentana
 
 
 def _formatoMonto(valor):
@@ -244,6 +245,8 @@ class VistaLogin(ctk.CTkFrame):
         self.popupCaja.transient(self.winfo_toplevel())
         self.popupCaja.grab_set()
 
+        aplicarIconoVentana(self.popupCaja)
+
         tarjeta = ctk.CTkFrame(
             self.popupCaja, fg_color=estilos.FONDO_PANEL,
             corner_radius=estilos.RADIO,
@@ -359,6 +362,8 @@ class VistaLogin(ctk.CTkFrame):
 
         popup = ctk.CTkToplevel(self)
         popup.title("Recuperar contraseña")
+        aplicarIconoVentana(popup)
+
         popup.configure(fg_color=estilos.FONDO)
         popup.geometry("420x360")
         popup.resizable(False, False)

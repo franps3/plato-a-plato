@@ -26,6 +26,7 @@ from CTkMessagebox import CTkMessagebox
 from PIL import Image
 
 from . import estilos
+from .dialogos import aplicarIconoVentana
 from .iconos import obtenerIconos
 
 
@@ -270,6 +271,7 @@ class VistaVenta(ctk.CTkFrame):
 
         self.popupCarrito = ctk.CTkToplevel(self)
         self.popupCarrito.title("Carrito")
+        aplicarIconoVentana(self.popupCarrito)
         self.popupCarrito.configure(fg_color=estilos.FONDO)
         self.popupCarrito.geometry("560x600")
         self.popupCarrito.resizable(False, False)
@@ -486,6 +488,7 @@ class VistaVenta(ctk.CTkFrame):
 
         self.popupGasto = ctk.CTkToplevel(self)
         self.popupGasto.title("Registrar Gasto")
+        aplicarIconoVentana(self.popupGasto)
         self.popupGasto.configure(fg_color=estilos.FONDO)
         # COR9: alto ampliado para que los botones Registrar/Cancelar se
         # muestren completos (el formulario con el selector de caja MJ1 los

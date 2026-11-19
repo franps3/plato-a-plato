@@ -8,9 +8,28 @@
 #   * CU15 reiniciar
 #   * CU17 importarDb
 
+import os
+import sys
+
 import customtkinter as ctk
 
 from . import estilos
+
+
+def aplicarIconoVentana(ventana):
+    """Aplica logo.ico a una ventana principal o a un CTkToplevel."""
+    if hasattr(sys, "_MEIPASS"):
+        base = sys._MEIPASS
+    elif getattr(sys, "frozen", False):
+        base = os.path.dirname(sys.executable)
+    else:
+        base = os.path.dirname(os.path.dirname(__file__))
+
+    rutaIcono = os.path.join(base, "vistas", "recursos", "logo.ico")
+    try:
+        ventana.iconbitmap(rutaIcono)
+    except Exception:
+        pass
 
 
 class PopupPassword(ctk.CTkToplevel):
@@ -29,6 +48,7 @@ class PopupPassword(ctk.CTkToplevel):
         self.resultado = None
 
         self.title(titulo)
+        aplicarIconoVentana(self)
         self.configure(fg_color=estilos.FONDO)
         self.geometry("460x280")
         self.resizable(False, False)

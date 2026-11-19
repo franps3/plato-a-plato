@@ -17,6 +17,7 @@
 # las vistas y el controlador.
 
 import customtkinter as ctk
+import os
 from PIL import Image
 
 from . import estilos
@@ -48,6 +49,8 @@ class Aplicacion(ctk.CTk):
         self._cargarIconos()
         self._construirBarra()
         self._construirContenido()
+        self._construirEscudo()
+        self._construirPiePagina()
 
         # Pantalla inicial: gestor de sesión.
         self.mostrarLogin()
@@ -73,6 +76,12 @@ class Aplicacion(ctk.CTk):
         rutas = obtenerIconos()
         self.iconoHome = ctk.CTkImage(
             light_image=Image.open(rutas["casa"]), size=(26, 26)
+        )
+
+        directorioRecursos = os.path.join(os.path.dirname(__file__), "recursos")
+        rutaEscudo = os.path.join(directorioRecursos, "escudo.png")
+        self.iconoEscudo = ctk.CTkImage(
+            light_image=Image.open(rutaEscudo), size=(58, 58)
         )
 
     # ------------------------------------------------------------------
@@ -117,6 +126,31 @@ class Aplicacion(ctk.CTk):
         """Crea el contenedor donde se intercambian las vistas."""
         self.contenido = ctk.CTkFrame(self, fg_color=estilos.FONDO)
         self.contenido.pack(fill="both", expand=True)
+
+    def _construirEscudo(self):
+        """Muestra el escudo arriba a la derecha sobre todas las vistas."""
+        self.escudo = ctk.CTkLabel(
+            self,
+            text="",
+            image=self.iconoEscudo,
+            fg_color="transparent",
+        )
+        self.escudo.place(relx=1.0, rely=0.0, x=-18, y=6, anchor="ne")
+
+    def _construirPiePagina(self):
+        """Crea el crédito compartido mostrado bajo todas las vistas."""
+        self.piePagina = ctk.CTkLabel(
+            self,
+            text=(
+                "Sistema diseñado y desarrollado por alumnos de la Escuela "
+                "Técnica N°29 D.E. 6 'Reconquista de Buenos Aires'."
+            ),
+            font=estilos.F_PEQUENA,
+            text_color=estilos.TEXTO_TENUE,
+            fg_color=estilos.FONDO,
+            anchor="center",
+        )
+        self.piePagina.pack(side="bottom", fill="x", pady=(0, 8))
 
     # ------------------------------------------------------------------
     # Cambio de vistas
